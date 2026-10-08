@@ -89,7 +89,7 @@ A pasta `.agents/` está no `.gitignore` e não é versionada. Em macOS ou Linux
 
 ### Skill externa: `translate-to-english`
 
-O fluxo de duas fases para skills e agents (ADR-0006) usa a skill `translate-to-english`, que fica no repositório [AlexandreJareck/skills](https://github.com/AlexandreJareck/skills), e não aqui. Instale-a no nível do usuário: em `~/.claude/skills/translate-to-english/` para o Claude Code e em `~/.agents/skills/translate-to-english/` para o Codex.
+O fluxo de duas fases para skills e agents (ADR-0006) usa a skill `translate-to-english`, que fica no repositório [AlexandreJareck/skill-labs](https://github.com/AlexandreJareck/skill-labs), e não aqui. Instale-a no nível do usuário: em `~/.claude/skills/translate-to-english/` para o Claude Code e em `~/.agents/skills/translate-to-english/` para o Codex.
 
 ## Roadmap
 
