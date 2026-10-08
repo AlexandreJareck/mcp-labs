@@ -27,7 +27,7 @@ uv run pytest
 uv run pre-commit run --all-files
 ```
 
-As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em todo PR.
+As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em todo PR. O job `secrets` roda o [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo o histórico do repositório; o mesmo gitleaks roda no pre-commit sobre o que está em stage ([ADR-0011](docs/adr/0011-gitleaks-contra-vazamento-de-segredos.md)). Na primeira execução, o pre-commit instala o Go para compilar o gitleaks, o que leva alguns minutos.
 
 ## Estrutura
 
@@ -95,11 +95,9 @@ O fluxo de duas fases para skills e agents (ADR-0006) usa a skill `translate-to-
 
 | Fase | Entrega | O que se aprende |
 |------|---------|------------------|
-| 1 | Servidor básico com Chinook | tools, stdio |
-| 2 | Validação por AST, somente leitura e suíte de ataque | segurança |
-| 3 | Resources, log e limites | resources, observabilidade |
-| 4 | RAG sobre schema e dicionário de dados | embeddings, recuperação |
-| 5 | Harness de avaliação | medir de verdade |
-| 6 | Experimento de fine-tuning | quando vale a pena |
+| 1 | Servidor básico com Chinook: listar tabelas, descrever schema e amostrar linhas, sem SQL livre | tools, stdio |
+| 2 | Tool de SQL com validação por AST, somente leitura, mascaramento e suíte de ataque | segurança |
+| 3 | Resources, log de auditoria, limites configuráveis, HTTP com token e confirmação humana | resources, observabilidade, transportes |
+| 4 | RAG local sobre schema e dicionário de dados, com busca híbrida | embeddings, recuperação |
 
-O servidor `sqlite-consulta` começa pelo Design Doc `docs/design/0001-sqlite-consulta.md`.
+O desenho do `sqlite-consulta` está no Design Doc [0001](docs/design/0001-sqlite-consulta.md). O harness de avaliação e o experimento de fine-tuning saíram do roadmap ([ADR-0010](docs/adr/0010-remocao-do-harness-de-avaliacao-e-fine-tuning.md)).
