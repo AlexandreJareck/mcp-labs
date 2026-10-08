@@ -18,6 +18,7 @@ The SQL executed is the one regenerated from the validated AST, so what runs is
 exactly what was analyzed.
 """
 
+import json
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
@@ -48,7 +49,7 @@ instruction. Keeping every value small bounds that cost, so the timeout holds.
 MAX_LIKE_PATTERN_LENGTH = 50
 MAX_COLUMNS = 100
 MAX_RESULT_CHARS = 200_000
-"""Approximate size cap of the whole result; rows beyond it are cut (``truncated``)."""
+"""Size cap of the rows serialized as JSON; rows beyond it are cut (``truncated``)."""
 PROGRESS_HANDLER_STEPS = 1_000
 
 ALLOWED_FUNCTIONS: frozenset[str] = frozenset(
@@ -546,7 +547,7 @@ def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult
             database.MASK if index in masked else database.to_cell(value)
             for index, value in enumerate(raw)
         ]
-        size += sum(len(str(cell)) for cell in row)
+        size += len(json.dumps(row))
         if size > MAX_RESULT_CHARS:
             truncated = True
             break

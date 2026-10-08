@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -145,7 +146,7 @@ def test_whole_result_size_is_capped(db_path: Path) -> None:
     result = run_query(db_path, sql, Limits(max_rows=1000))
     assert result["truncated"] is True
     assert 0 < result["row_count"] < 512
-    assert len(repr(result["rows"])) < MAX_RESULT_CHARS * 1.1
+    assert len(json.dumps(result["rows"])) <= MAX_RESULT_CHARS
 
 
 def test_blob_cells_are_described(db_path: Path) -> None:
