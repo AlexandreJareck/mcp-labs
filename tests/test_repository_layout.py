@@ -21,6 +21,7 @@ REQUIRED_FILES: tuple[str, ...] = (
     ".gitignore",
     ".pre-commit-config.yaml",
     ".python-version",
+    "AGENTS.md",
     "CLAUDE.md",
     "README.md",
     "pyproject.toml",

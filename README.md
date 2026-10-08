@@ -54,7 +54,7 @@ mcp-labs/
 5. Novo servidor: use a skill `new-mcp-server`.
 6. Abra um PR para a `main` com descrição em português, peça a revisão do agent `reviewer` e faça merge por squash com o CI verde.
 
-As convenções completas para o Claude Code estão em [CLAUDE.md](CLAUDE.md).
+As instruções para agentes (Codex e Claude Code) estão em [AGENTS.md](AGENTS.md), em inglês; o `CLAUDE.md` apenas importa esse arquivo.
 
 ## Roadmap
 
