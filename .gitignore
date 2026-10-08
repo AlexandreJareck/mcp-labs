@@ -33,3 +33,6 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Codex skills (local junction to .claude/skills)
+.agents/

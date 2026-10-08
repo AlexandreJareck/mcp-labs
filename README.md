@@ -56,6 +56,41 @@ mcp-labs/
 
 As instruções para agentes (Codex e Claude Code) estão em [AGENTS.md](AGENTS.md), em inglês; o `CLAUDE.md` apenas importa esse arquivo.
 
+## Skills e agents
+
+| Nome | Tipo | Para que serve |
+|------|------|----------------|
+| `new-mcp-server` | skill | Cria um servidor MCP em `servers/<nome>/` no padrão do repositório |
+| `new-adr` | skill | Cria um ADR numerado em `docs/adr/` |
+| `reviewer` | agent (só Claude Code) | Revisa o diff contra as convenções e o checklist de segurança, sem editar arquivos |
+
+Os arquivos ficam em `.claude/skills/` e `.claude/agents/`, no padrão aberto Agent Skills (`SKILL.md`).
+
+### Claude Code
+
+Não há o que instalar: o Claude Code carrega `.claude/skills/` e `.claude/agents/` quando é aberto na raiz do repositório.
+
+- Skills: `/new-mcp-server` e `/new-adr`, ou um pedido em linguagem natural que corresponda à descrição da skill.
+- Agent: peça, por exemplo, "use o agent reviewer para revisar o diff desta branch".
+
+### Codex
+
+O Codex lê skills de `.agents/skills/`, não de `.claude/skills/`. Para expor as mesmas skills sem duplicar arquivos, crie uma junção local, uma vez por clone, no PowerShell e na raiz do repositório:
+
+```powershell
+New-Item -ItemType Directory -Force .agents
+New-Item -ItemType Junction -Path .agents\skills -Target .claude\skills
+```
+
+A pasta `.agents/` está no `.gitignore` e não é versionada. Em macOS ou Linux, crie um link simbólico equivalente de `.agents/skills` para `../.claude/skills`.
+
+- Skills: `$new-mcp-server` e `$new-adr`; `/skills` lista as skills disponíveis.
+- Diferença: o Codex não tem um equivalente ao agent `reviewer` neste repositório. Para revisar, peça ao Codex que siga o checklist de `.claude/agents/reviewer.md`.
+
+### Skill externa: `translate-to-english`
+
+O fluxo de duas fases para skills e agents (ADR-0006) usa a skill `translate-to-english`, que fica no repositório [AlexandreJareck/skills](https://github.com/AlexandreJareck/skills), e não aqui. Instale-a no nível do usuário: em `~/.claude/skills/translate-to-english/` para o Claude Code e em `~/.agents/skills/translate-to-english/` para o Codex.
+
 ## Roadmap
 
 | Fase | Entrega | O que se aprende |
