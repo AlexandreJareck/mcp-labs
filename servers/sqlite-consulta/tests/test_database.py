@@ -50,6 +50,8 @@ def test_list_tables_returns_user_tables_with_counts(connection: sqlite3.Connect
         {"name": "Album", "row_count": 1},
         {"name": "Artist", "row_count": 8},
         {"name": "Customer", "row_count": 2},
+        {"name": "Employee", "row_count": 2},
+        {"name": "Invoice", "row_count": 2},
         {"name": 'Odd"Name', "row_count": 1},
     ]
 

@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Secure text-to-SQL data assistant over the Chinook sample database (SQLite)."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["mcp"]
+dependencies = [
+    "mcp",
+    "sqlglot>=30.21.0",
+]
 
 [project.scripts]
 sqlite-consulta = "sqlite_consulta.server:main"

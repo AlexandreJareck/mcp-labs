@@ -194,8 +194,15 @@ def describe_table(connection: sqlite3.Connection, requested: str) -> TableSchem
     return TableSchema(table=table, columns=columns, foreign_keys=foreign_keys)
 
 
-def _to_cell(value: CellValue | bytes) -> CellValue:
-    # sqlite3 only returns None, int, float, str, or bytes (BLOB).
+def to_cell(value: CellValue | bytes) -> CellValue:
+    """Convert a SQLite value to a JSON-friendly cell, describing BLOBs instead of copying them.
+
+    Args:
+        value: A value returned by `sqlite3` (None, int, float, str, or bytes).
+
+    Returns:
+        The value itself, or a short description for BLOBs.
+    """
     if isinstance(value, bytes):
         return f"<blob: {len(value)} bytes>"
     return value
@@ -224,7 +231,7 @@ def sample_rows(connection: sqlite3.Connection, requested: str) -> SampleRows:
     fetched = cursor.fetchall()
     rows = [
         [
-            MASK if is_masked and value is not None else _to_cell(value)
+            MASK if is_masked and value is not None else to_cell(value)
             for value, is_masked in zip(row, masked, strict=True)
         ]
         for row in fetched[:SAMPLE_ROWS_LIMIT]

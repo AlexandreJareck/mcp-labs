@@ -8,7 +8,7 @@ from mcp.server import MCPServer
 from sqlite_consulta import chinook, server
 from sqlite_consulta.database import MASK
 
-TOOL_NAMES = {"list_tables", "describe_table", "sample_rows"}
+TOOL_NAMES = {"list_tables", "describe_table", "sample_rows", "run_query"}
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ async def test_list_tables_tool(client: Client) -> None:
     assert not result.is_error
     assert result.structured_content is not None
     names = [table["name"] for table in result.structured_content["tables"]]
-    assert names == ["Album", "Artist", "Customer", 'Odd"Name']
+    assert names == ["Album", "Artist", "Customer", "Employee", "Invoice", 'Odd"Name']
 
 
 @pytest.mark.anyio
@@ -68,12 +68,40 @@ async def test_table_name_length_is_limited(client: Client) -> None:
 
 
 @pytest.mark.anyio
+async def test_run_query_tool_masks_sensitive_columns(client: Client) -> None:
+    result = await client.call_tool(
+        "run_query", {"sql": "SELECT FirstName, Email AS contact FROM Customer ORDER BY 1"}
+    )
+    assert not result.is_error
+    assert result.structured_content is not None
+    assert result.structured_content["rows"] == [["Ana", MASK], ["Bruno", MASK]]
+    assert result.structured_content["masked_columns"] == ["contact"]
+    assert "example.com" not in str(result.content)
+
+
+@pytest.mark.anyio
+async def test_run_query_tool_reports_the_blocking_layer(client: Client) -> None:
+    result = await client.call_tool("run_query", {"sql": "DROP TABLE Customer"})
+    assert result.is_error
+    assert "Query rejected (ast)" in str(result.content)
+
+
+@pytest.mark.anyio
+async def test_run_query_tool_reports_runtime_errors(client: Client) -> None:
+    result = await client.call_tool("run_query", {"sql": "SELECT ntile(0) OVER () AS x"})
+    assert result.is_error
+    assert "query failed" in str(result.content)
+
+
+@pytest.mark.anyio
 async def test_tools_never_write(client: Client, db_path: Path) -> None:
     before = db_path.read_bytes()
     for tool, args in [
         ("list_tables", {}),
         ("describe_table", {"table": "Artist"}),
         ("sample_rows", {"table": "Artist"}),
+        ("run_query", {"sql": "SELECT * FROM Customer"}),
+        ("run_query", {"sql": "DELETE FROM Customer"}),
     ]:
         await client.call_tool(tool, args)
     assert db_path.read_bytes() == before
