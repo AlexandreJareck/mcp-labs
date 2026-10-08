@@ -1,0 +1,39 @@
+[project]
+name = "mcp-labs"
+version = "0.0.0"
+description = "Workspace root of the mcp-labs monorepo (not published)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["mypy", "pre-commit", "pytest", "pytest-cov", "ruff"]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["servers/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "S", "PT", "RUF", "D", "T20"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D"]
+"servers/*/tests/**" = ["S101", "D"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "servers"]
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
