@@ -1,6 +1,6 @@
 # 0001. Servidor `sqlite-consulta`: assistente de dados text-to-SQL seguro sobre o Chinook
 
-- **Status:** Em revisão
+- **Status:** Aprovado
 - **Autor:** Claude Code, para revisão de @AlexandreJareck
 - **Data:** 2026-10-08
 
