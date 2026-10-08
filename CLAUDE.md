@@ -26,5 +26,12 @@ Monorepo de estudo e construção de servidores MCP em Python. Cada servidor fic
 ## Novo servidor
 Use a skill `novo-mcp`. Não crie servidores à mão.
 
+## Skills e agents
+Toda skill ou agent novo ou alterado em `.claude/` passa por duas fases (ADR-0006):
+1. Redigir em pt-BR e submeter à revisão do usuário, que aprova ou pede alterações.
+2. Só após a aprovação, traduzir para inglês com a skill `translate-to-english`, sem mudar o conteúdo.
+
+Modelos e textos que a skill gera para o usuário (README de servidor, ADR, relatório de revisão) continuam em português, mesmo com a skill em inglês.
+
 ## Definição de pronto
 Lint, formatação, tipos e testes passando; docs atualizadas; ADR ou Design Doc quando a regra pedir; revisão do agent `revisor` sem achados bloqueantes.
