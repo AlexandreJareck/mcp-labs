@@ -1,6 +1,7 @@
 import hashlib
 import io
 import secrets
+import urllib.error
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,6 +34,7 @@ class FakeServer:
     """Stands in for the network: records requested URLs and serves `body`."""
 
     body: bytes = PAYLOAD
+    error: OSError | None = None
     requested: list[str] = field(default_factory=list)
 
 
@@ -42,6 +44,8 @@ def served(monkeypatch: pytest.MonkeyPatch) -> FakeServer:
 
     def fake_urlopen(url: str, timeout: float) -> io.BytesIO:
         fake.requested.append(url)
+        if fake.error is not None:
+            raise fake.error
         return io.BytesIO(fake.body)
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
@@ -133,3 +137,16 @@ def test_download_refuses_non_https(served: FakeServer, tmp_path: Path, url: str
     with pytest.raises(ValueError, match="HTTPS"):
         download_database(tmp_path / "db.sqlite", _release(url=url))
     assert served.requested == []
+
+
+@pytest.mark.parametrize(
+    "error",
+    [urllib.error.URLError("unreachable"), TimeoutError("timed out")],
+)
+def test_download_network_failure_leaves_nothing(
+    served: FakeServer, tmp_path: Path, error: OSError
+) -> None:
+    served.error = error
+    with pytest.raises(type(error)):
+        download_database(tmp_path / "db.sqlite", _release())
+    assert list(tmp_path.iterdir()) == []

@@ -117,5 +117,9 @@ def main(argv: list[str] | None = None) -> None:
     except chinook.DatabaseError as error:
         logger.error("%s", error)
         raise SystemExit(1) from None
+    except OSError as error:
+        # Network failures (URLError, HTTPError, timeouts) and file system errors.
+        logger.error("Could not obtain the database: %s", error)
+        raise SystemExit(1) from None
     logger.info("Starting sqlite-consulta over stdio with database %s", path)
     create_server(path).run()

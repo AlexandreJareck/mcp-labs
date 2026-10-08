@@ -114,12 +114,16 @@ def test_sample_rows_respects_fixed_limit(connection: sqlite3.Connection) -> Non
     result = sample_rows(connection, "Artist")
     assert result["limit"] == SAMPLE_ROWS_LIMIT
     assert len(result["rows"]) == SAMPLE_ROWS_LIMIT
+    assert result["row_count"] == SAMPLE_ROWS_LIMIT
+    assert result["truncated"] is True
     assert result["columns"] == ["ArtistId", "Name"]
     assert result["masked_columns"] == []
 
 
 def test_sample_rows_masks_sensitive_columns(connection: sqlite3.Connection) -> None:
     result = sample_rows(connection, "customer")
+    assert result["row_count"] == 2
+    assert result["truncated"] is False
     assert result["masked_columns"] == ["Phone", "Email"]
     assert result["rows"] == [
         [1, "Ana", "Brazil", MASK, MASK],

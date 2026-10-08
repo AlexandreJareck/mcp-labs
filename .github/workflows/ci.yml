@@ -20,6 +20,7 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      # ADR-0002: 80% per server. With a second server, measure each package separately.
       - run: uv run pytest --cov=sqlite_consulta --cov-report=term-missing --cov-fail-under=80
   secrets:
     runs-on: ubuntu-latest

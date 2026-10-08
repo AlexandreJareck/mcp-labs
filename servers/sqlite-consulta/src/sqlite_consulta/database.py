@@ -63,6 +63,8 @@ class SampleRows(TypedDict):
     table: str
     columns: list[str]
     rows: list[list[CellValue]]
+    row_count: int
+    truncated: bool
     limit: int
     masked_columns: list[str]
     notice: str
@@ -214,21 +216,25 @@ def sample_rows(connection: sqlite3.Connection, requested: str) -> SampleRows:
     """
     table = resolve_table(connection, requested)
     # The table name comes from the schema and is quoted; the limit is bound.
+    # One extra row is fetched only to tell whether the table has more rows.
     query = f"SELECT * FROM {_quote_identifier(table)} LIMIT ?"  # noqa: S608
-    cursor = connection.execute(query, (SAMPLE_ROWS_LIMIT,))
+    cursor = connection.execute(query, (SAMPLE_ROWS_LIMIT + 1,))
     columns = [str(description[0]) for description in cursor.description]
     masked = [is_sensitive(table, column) for column in columns]
+    fetched = cursor.fetchall()
     rows = [
         [
             MASK if is_masked and value is not None else _to_cell(value)
             for value, is_masked in zip(row, masked, strict=True)
         ]
-        for row in cursor.fetchall()
+        for row in fetched[:SAMPLE_ROWS_LIMIT]
     ]
     return SampleRows(
         table=table,
         columns=columns,
         rows=rows,
+        row_count=len(rows),
+        truncated=len(fetched) > SAMPLE_ROWS_LIMIT,
         limit=SAMPLE_ROWS_LIMIT,
         masked_columns=[
             column for column, is_masked in zip(columns, masked, strict=True) if is_masked

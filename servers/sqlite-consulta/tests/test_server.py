@@ -1,3 +1,4 @@
+import urllib.error
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -107,3 +108,18 @@ def test_main_download_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     monkeypatch.setattr(chinook, "download_database", downloaded.append)
     server.main(["download-db"])
     assert downloaded == [tmp_path.resolve() / chinook.CHINOOK.filename]
+
+
+def test_main_download_network_error_exits_cleanly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv(chinook.DATA_DIR_ENV, str(tmp_path))
+
+    def fail(path: Path) -> Path:
+        raise urllib.error.URLError("unreachable")
+
+    monkeypatch.setattr(chinook, "download_database", fail)
+    with pytest.raises(SystemExit) as exit_info:
+        server.main(["download-db"])
+    assert exit_info.value.code == 1
+    assert "Could not obtain the database" in caplog.text

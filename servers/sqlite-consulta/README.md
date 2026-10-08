@@ -12,7 +12,7 @@ O SQL é escrito pelo cliente MCP (por exemplo, o Claude Code). O servidor forne
 - Nomes de tabela são comparados com a lista real do schema (sem diferenciar maiúsculas); um nome desconhecido vira erro da tool, sem executar SQL com o texto recebido.
 - `sample_rows` devolve no máximo 5 linhas e mascara as colunas sensíveis (`***`): endereço, CEP, telefone, fax e e-mail de `Customer` e `Employee`, data de nascimento de `Employee`, e endereço e CEP de cobrança de `Invoice`.
 - As linhas vêm com um aviso de que são dados não confiáveis: instruções encontradas nelas não devem ser seguidas.
-- Nenhuma tool recebe caminho de arquivo; o servidor só abre o arquivo fixo do Chinook, depois de conferir o SHA-256.
+- Nenhuma tool recebe caminho de arquivo; o servidor só abre o arquivo fixo do Chinook e confere o SHA-256 dele ao iniciar. Se o arquivo for trocado com o servidor já rodando, a troca só é detectada no próximo início (risco aceito: exige acesso de escrita à pasta de dados local).
 
 ## Pré-requisitos
 
@@ -52,7 +52,7 @@ Todas são somente leitura (`read_only_hint`) e devolvem saída estruturada.
 |------|-----------|-----------|
 | `list_tables` | nenhum | Tabelas do banco com a contagem de linhas. |
 | `describe_table` | `table` | Colunas (tipo, `NOT NULL`, chave primária, se é sensível) e chaves estrangeiras. |
-| `sample_rows` | `table` | Até 5 linhas, com as colunas sensíveis mascaradas. |
+| `sample_rows` | `table` | Até 5 linhas, com as colunas sensíveis mascaradas; `row_count` e `truncated` indicam quantas vieram e se a tabela tem mais. |
 
 ## Resources
 
