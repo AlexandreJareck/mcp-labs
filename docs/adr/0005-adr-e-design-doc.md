@@ -14,7 +14,7 @@ Decisões e desenhos precisam ficar registrados junto ao código, para que o rac
 
 ## Decisão
 
-- **ADR** (`docs/adr/`) registra **uma decisão** técnica relevante: contexto, decisão, consequências e alternativas. Numeração sequencial (`NNNN-slug.md`) a partir de `0000-template.md`, criado com a skill `novo-adr`.
+- **ADR** (`docs/adr/`) registra **uma decisão** técnica relevante: contexto, decisão, consequências e alternativas. Numeração sequencial (`NNNN-slug.md`) a partir de `0000-template.md`, criado com a skill `new-adr`.
 - **Design Doc** (`docs/design/`) descreve **como construir** algo **antes** de construir. É exigido quando a mudança envolve segurança, mais de um componente ou mais de um dia de trabalho. Segue `docs/design/0000-template.md`, com modelo de ameaças obrigatório quando envolve segurança ou dados.
 - Um Design Doc costuma gerar ADRs, listados na sua seção final.
 

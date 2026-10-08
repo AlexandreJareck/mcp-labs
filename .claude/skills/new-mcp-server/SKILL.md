@@ -1,25 +1,25 @@
 ---
-name: novo-mcp
-description: Cria um novo servidor MCP em servers/<nome>/ no padrão do repositório.
+name: new-mcp-server
+description: Creates a new MCP server in servers/<nome>/ following the repository's standard.
 ---
 
-# Novo servidor MCP
+# New MCP server
 
-Cria um servidor MCP com transporte stdio em `servers/<server-name>/`, como membro do workspace `uv`.
+Creates an MCP server with stdio transport in `servers/<server-name>/`, as a member of the `uv` workspace.
 
-## Procedimento
+## Procedure
 
-1. **Nome e descrição.** Receba do usuário o nome em kebab-case (`<server-name>`, ex.: `sqlite-consulta`) e uma descrição de uma linha. Derive o pacote Python em snake_case (`<package_name>`, ex.: `sqlite_consulta`). Confirme que `servers/<server-name>/` ainda não existe.
-2. **Design Doc.** Se o servidor envolve segurança ou dados, mais de um componente ou mais de um dia de trabalho, ele exige Design Doc (ADR-0005). Procure-o em `docs/design/`; se não existir, pare e crie-o (a partir de `docs/design/0000-template.md`) com o usuário antes de seguir.
-3. **Arquivos.** Crie os arquivos abaixo, trocando `<server-name>`, `<package_name>` e `<one-line description>`:
+1. **Name and description.** Get from the user the name in kebab-case (`<server-name>`, e.g., `sqlite-consulta`) and a one-line description. Derive the Python package name in snake_case (`<package_name>`, e.g., `sqlite_consulta`). Confirm that `servers/<server-name>/` does not exist yet.
+2. **Design Doc.** If the server involves security or data, more than one component, or more than one day of work, it requires a Design Doc (ADR-0005). Look for it in `docs/design/`; if it does not exist, stop and create it (from `docs/design/0000-template.md`) with the user before continuing.
+3. **Files.** Create the files below, replacing `<server-name>`, `<package_name>`, and `<one-line description>`:
    - `servers/<server-name>/pyproject.toml`
    - `servers/<server-name>/README.md`
    - `servers/<server-name>/src/<package_name>/__init__.py`
    - `servers/<server-name>/src/<package_name>/server.py`
    - `servers/<server-name>/tests/test_server.py`
-4. **Workspace.** Na raiz, rode `uv add <server-name>`. Isso adiciona o servidor às `dependencies` da raiz e cria `<server-name> = { workspace = true }` em `[tool.uv.sources]`. Sem esse passo, `uv sync --all-groups` não instala o servidor e os testes dele não conseguem importá-lo.
-5. **mypy.** No `pyproject.toml` da raiz, acrescente `"servers/<server-name>/src"` e `"servers/<server-name>/tests"` a `[tool.mypy] files`.
-6. **Validação.** Na raiz do repositório, rode e só conclua com tudo passando:
+4. **Workspace.** At the root, run `uv add <server-name>`. This adds the server to the root `dependencies` and creates `<server-name> = { workspace = true }` in `[tool.uv.sources]`. Without this step, `uv sync --all-groups` does not install the server and its tests cannot import it.
+5. **mypy.** In the root `pyproject.toml`, add `"servers/<server-name>/src"` and `"servers/<server-name>/tests"` to `[tool.mypy] files`.
+6. **Validation.** At the repository root, run the following and only finish when everything passes:
    ```bash
    uv sync --all-groups
    uv run ruff check .
@@ -27,10 +27,13 @@ Cria um servidor MCP com transporte stdio em `servers/<server-name>/`, como memb
    uv run mypy
    uv run pytest
    ```
-   O `uv.lock` atualizado deve entrar no commit, junto com o `pyproject.toml` da raiz.
-7. **Decisões.** Lembre o usuário de registrar em ADR (skill `novo-adr`) qualquer decisão técnica nova, por exemplo uma dependência adicional.
+   The updated `uv.lock` must go into the commit, together with the root `pyproject.toml`.
+7. **Decisions.** Remind the user to record any new technical decision in an ADR (skill `new-adr`), for example an additional dependency.
 
-Regra do repositório (ADR-0004): servidor stdio nunca usa `print()` nem escreve no stdout; logs via `logging` para stderr.
+Repository rules:
+
+- A stdio server never uses `print()` or writes to stdout; logs go via `logging` to stderr (ADR-0004).
+- Code, docstrings, and identifiers in English; the server's `README.md` in Portuguese (ADR-0003). Use the README template below without translating it.
 
 ## Templates
 
@@ -53,7 +56,7 @@ requires = ["uv_build>=0.11.8,<0.12.0"]
 build-backend = "uv_build"
 ```
 
-Se a versão do `uv` instalada for outra, use a faixa de `uv_build` que `uv init --package` gerar.
+If the installed `uv` version is different, use the `uv_build` range that `uv init --package` generates.
 
 ### `src/<package_name>/__init__.py`
 

@@ -12,4 +12,4 @@
 - [ ] Documentação atualizada (README do servidor, `CLAUDE.md` se necessário)
 - [ ] ADR criado, se houve decisão técnica relevante
 - [ ] Design Doc criado, se a mudança envolve segurança, mais de um componente ou mais de um dia de trabalho
-- [ ] Revisão pelo agent `revisor` sem achados bloqueantes
+- [ ] Revisão pelo agent `reviewer` sem achados bloqueantes

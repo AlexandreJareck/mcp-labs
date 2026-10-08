@@ -9,9 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVERS_DIR = ROOT / "servers"
 
 REQUIRED_FILES: tuple[str, ...] = (
-    ".claude/agents/revisor.md",
-    ".claude/skills/novo-adr/SKILL.md",
-    ".claude/skills/novo-mcp/SKILL.md",
+    ".claude/agents/reviewer.md",
+    ".claude/skills/new-adr/SKILL.md",
+    ".claude/skills/new-mcp-server/SKILL.md",
     ".github/pull_request_template.md",
     ".github/workflows/ci.yml",
     "docs/adr/0000-template.md",
@@ -21,6 +21,7 @@ REQUIRED_FILES: tuple[str, ...] = (
     ".gitignore",
     ".pre-commit-config.yaml",
     ".python-version",
+    "AGENTS.md",
     "CLAUDE.md",
     "README.md",
     "pyproject.toml",
