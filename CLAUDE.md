@@ -19,12 +19,19 @@ Monorepo de estudo e construção de servidores MCP em Python. Cada servidor fic
 - Dependência nova: `uv add`, e o `uv.lock` vai no commit.
 
 ## Decisões e documentação
-- Decisão técnica relevante: ADR em `docs/adr/` (skill `novo-adr`).
+- Decisão técnica relevante: ADR em `docs/adr/` (skill `new-adr`).
 - Mudança que envolve segurança, mais de um componente ou mais de um dia de trabalho: Design Doc em `docs/design/` antes de codar.
 - Todo servidor tem `README.md` com: o que faz, como rodar e quais tools/resources expõe.
 
 ## Novo servidor
-Use a skill `novo-mcp`. Não crie servidores à mão.
+Use a skill `new-mcp-server`. Não crie servidores à mão.
+
+## Skills e agents
+Toda skill ou agent novo ou alterado em `.claude/` passa por duas fases (ADR-0006):
+1. Redigir em pt-BR e submeter à revisão do usuário, que aprova ou pede alterações.
+2. Só após a aprovação, traduzir para inglês com a skill `translate-to-english`, sem mudar o conteúdo.
+
+Modelos e textos que a skill gera para o usuário (README de servidor, ADR, relatório de revisão) continuam em português, mesmo com a skill em inglês.
 
 ## Definição de pronto
-Lint, formatação, tipos e testes passando; docs atualizadas; ADR ou Design Doc quando a regra pedir; revisão do agent `revisor` sem achados bloqueantes.
+Lint, formatação, tipos e testes passando; docs atualizadas; ADR ou Design Doc quando a regra pedir; revisão do agent `reviewer` sem achados bloqueantes.

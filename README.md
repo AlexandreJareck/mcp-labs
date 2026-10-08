@@ -33,7 +33,7 @@ As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em
 
 ```
 mcp-labs/
-├── .claude/          # Claude Code: agent revisor e skills novo-mcp e novo-adr
+├── .claude/          # Claude Code: agent reviewer e skills new-mcp-server e new-adr
 ├── .github/          # CI (GitHub Actions) e template de PR
 ├── docs/
 │   ├── adr/          # decisões de arquitetura (ADRs)
@@ -49,10 +49,10 @@ mcp-labs/
 
 1. Crie uma branch curta a partir da `main` (por exemplo, `feat/sqlite-consulta`).
 2. Faça commits em inglês, no padrão [Conventional Commits](https://www.conventionalcommits.org/) (verificado pelo hook `commit-msg`).
-3. Decisão técnica relevante: registre um ADR em `docs/adr/` (skill `novo-adr`).
+3. Decisão técnica relevante: registre um ADR em `docs/adr/` (skill `new-adr`).
 4. Mudança que envolve segurança, mais de um componente ou mais de um dia de trabalho: escreva um Design Doc em `docs/design/` antes de codar.
-5. Novo servidor: use a skill `novo-mcp`.
-6. Abra um PR para a `main` com descrição em português, peça a revisão do agent `revisor` e faça merge por squash com o CI verde.
+5. Novo servidor: use a skill `new-mcp-server`.
+6. Abra um PR para a `main` com descrição em português, peça a revisão do agent `reviewer` e faça merge por squash com o CI verde.
 
 As convenções completas para o Claude Code estão em [CLAUDE.md](CLAUDE.md).
 
