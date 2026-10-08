@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVERS_DIR = ROOT / "servers"
 
 REQUIRED_FILES: tuple[str, ...] = (
-    ".claude/agents/revisor.md",
+    ".claude/agents/reviewer.md",
     ".claude/skills/new-adr/SKILL.md",
     ".claude/skills/new-mcp-server/SKILL.md",
     ".github/pull_request_template.md",

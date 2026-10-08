@@ -34,4 +34,4 @@ Toda skill ou agent novo ou alterado em `.claude/` passa por duas fases (ADR-000
 Modelos e textos que a skill gera para o usuário (README de servidor, ADR, relatório de revisão) continuam em português, mesmo com a skill em inglês.
 
 ## Definição de pronto
-Lint, formatação, tipos e testes passando; docs atualizadas; ADR ou Design Doc quando a regra pedir; revisão do agent `revisor` sem achados bloqueantes.
+Lint, formatação, tipos e testes passando; docs atualizadas; ADR ou Design Doc quando a regra pedir; revisão do agent `reviewer` sem achados bloqueantes.

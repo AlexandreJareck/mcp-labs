@@ -33,7 +33,7 @@ As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em
 
 ```
 mcp-labs/
-├── .claude/          # Claude Code: agent revisor e skills new-mcp-server e new-adr
+├── .claude/          # Claude Code: agent reviewer e skills new-mcp-server e new-adr
 ├── .github/          # CI (GitHub Actions) e template de PR
 ├── docs/
 │   ├── adr/          # decisões de arquitetura (ADRs)
@@ -52,7 +52,7 @@ mcp-labs/
 3. Decisão técnica relevante: registre um ADR em `docs/adr/` (skill `new-adr`).
 4. Mudança que envolve segurança, mais de um componente ou mais de um dia de trabalho: escreva um Design Doc em `docs/design/` antes de codar.
 5. Novo servidor: use a skill `new-mcp-server`.
-6. Abra um PR para a `main` com descrição em português, peça a revisão do agent `revisor` e faça merge por squash com o CI verde.
+6. Abra um PR para a `main` com descrição em português, peça a revisão do agent `reviewer` e faça merge por squash com o CI verde.
 
 As convenções completas para o Claude Code estão em [CLAUDE.md](CLAUDE.md).
 
