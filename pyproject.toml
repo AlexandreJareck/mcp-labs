@@ -4,7 +4,9 @@ version = "0.0.0"
 description = "Workspace root of the mcp-labs monorepo (not published)."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "sqlite-consulta",
+]
 
 [dependency-groups]
 dev = ["mypy", "pre-commit", "pytest", "pytest-cov", "ruff"]
@@ -14,6 +16,9 @@ package = false
 
 [tool.uv.workspace]
 members = ["servers/*"]
+
+[tool.uv.sources]
+sqlite-consulta = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -32,7 +37,7 @@ convention = "google"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["tests"]
+files = ["tests", "servers/sqlite-consulta/src", "servers/sqlite-consulta/tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "servers"]
