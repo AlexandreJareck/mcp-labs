@@ -1,3 +1,5 @@
+<!-- Título do PR em inglês, no padrão Conventional Commits (ex.: "feat(sqlite-consulta): add AST validation and attack suite"). No squash merge, ele vira a mensagem do commit na main (ADR-0003). -->
+
 ## O que muda
 
 <!-- Resumo da mudança e motivo. -->

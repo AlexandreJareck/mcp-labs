@@ -13,6 +13,7 @@ Monorepo for studying and building MCP servers in Python. Each server lives in `
 - Python 3.12+, `src/` layout, types throughout the code (`mypy --strict`), Google-style docstrings.
 - Code, identifiers, and commit messages in English. Docs, ADRs, and PR descriptions in Portuguese.
 - Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, `ci:`, `build:`, `test:`, `refactor:`).
+- PR titles in English, following Conventional Commits (e.g., `feat(sqlite-consulta): add AST validation and attack suite`): the squash merge turns the title into the commit message on `main` (ADR-0003).
 - No direct commits to `main`: short-lived branch and PR.
 - MCP server with stdio transport: never use `print()`. stdout is the protocol channel. Logs via `logging` to stderr.
 - No secrets in the code. Configuration via environment variables.
