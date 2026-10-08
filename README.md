@@ -2,7 +2,11 @@
 
 Monorepo de estudo e construção de servidores MCP (Model Context Protocol) em Python, seguindo padrões profissionais: ambiente reproduzível, qualidade automatizada, decisões documentadas e fluxo de PR.
 
-Cada servidor fica em `servers/<nome>/`. Ainda não há servidores; o primeiro será o `sqlite-consulta` (ver [Roadmap](#roadmap)).
+Cada servidor fica em `servers/<nome>/`.
+
+| Servidor | O que faz | Estado |
+|----------|-----------|--------|
+| [`sqlite-consulta`](servers/sqlite-consulta/README.md) | Assistente de dados text-to-SQL seguro sobre o banco Chinook (SQLite) | fase 1 do [Roadmap](#roadmap) |
 
 ## Pré-requisitos
 
@@ -27,7 +31,7 @@ uv run pytest
 uv run pre-commit run --all-files
 ```
 
-As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em todo PR. O job `secrets` roda o [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo o histórico do repositório; o mesmo gitleaks roda no pre-commit sobre o que está em stage ([ADR-0011](docs/adr/0011-gitleaks-contra-vazamento-de-segredos.md)). Na primeira execução, o pre-commit instala o Go para compilar o gitleaks, o que leva alguns minutos.
+As mesmas verificações (exceto o pre-commit) rodam no CI, no job `quality`, em todo PR; lá o `pytest` também exige cobertura mínima de 80% do `sqlite-consulta` (ADR-0002). O job `secrets` roda o [gitleaks](https://github.com/gitleaks/gitleaks) sobre todo o histórico do repositório; o mesmo gitleaks roda no pre-commit sobre o que está em stage ([ADR-0011](docs/adr/0011-gitleaks-contra-vazamento-de-segredos.md)). Na primeira execução, o pre-commit instala o Go para compilar o gitleaks, o que leva alguns minutos.
 
 ## Estrutura
 

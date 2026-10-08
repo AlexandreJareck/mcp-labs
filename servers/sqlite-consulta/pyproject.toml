@@ -1,0 +1,14 @@
+[project]
+name = "sqlite-consulta"
+version = "0.1.0"
+description = "Secure text-to-SQL data assistant over the Chinook sample database (SQLite)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["mcp"]
+
+[project.scripts]
+sqlite-consulta = "sqlite_consulta.server:main"
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"

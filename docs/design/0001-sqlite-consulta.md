@@ -1,6 +1,6 @@
 # 0001. Servidor `sqlite-consulta`: assistente de dados text-to-SQL seguro sobre o Chinook
 
-- **Status:** Em revisão
+- **Status:** Aprovado
 - **Autor:** Claude Code, para revisão de @AlexandreJareck
 - **Data:** 2026-10-08
 
@@ -160,7 +160,7 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 
 ## Plano de testes
 
-- Fase 1: testes com um banco pequeno criado no próprio teste (sem download); prova de que a conexão recusa escrita; nomes de tabela inválidos e maliciosos; mascaramento em `sample_rows`; download testado com servidor HTTP local e hash certo/errado.
+- Fase 1: testes com um banco pequeno criado no próprio teste (sem download); prova de que a conexão recusa escrita; nomes de tabela inválidos e maliciosos; mascaramento em `sample_rows`; download testado com hash certo e errado, arquivo maior que o esperado e falha de rede, substituindo o `urlopen` por um falso (o download só aceita HTTPS, então um servidor HTTP local seria recusado); o download real foi verificado manualmente.
 - Fase 2: suíte de ataque parametrizada, cada caso com a camada que o bloqueia; testes de mascaramento (alias, expressão, `*`, `UNION`, subconsulta, CTE); prompt injection via dados com verificação de que nada foi escrito.
 - Fase 3: resources listáveis por um cliente MCP em memória; HTTP sem token e com token errado retorna 401; log de auditoria capturado e sem literais; limites e confirmação (aceita, recusa, cliente sem suporte).
 - Fase 4: perguntas de exemplo retornam os trechos esperados entre os primeiros resultados; índice reproduzível.
