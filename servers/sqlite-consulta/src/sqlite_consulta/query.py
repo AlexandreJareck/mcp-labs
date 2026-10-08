@@ -37,9 +37,18 @@ type Layer = Literal["ast", "read_only", "authorizer", "limits", "masking"]
 
 DEFAULT_TIMEOUT_MS = 2000
 DEFAULT_MAX_ROWS = 200
-MAX_SQL_LENGTH = 10_000
-MAX_VALUE_LENGTH = 100_000
-MAX_CELL_CHARS = 2_000
+MAX_SQL_LENGTH = 5_000
+MAX_VALUE_LENGTH = 2_000
+"""Maximum size of any SQLite value, in bytes.
+
+The progress handler only runs between VM instructions, and some functions
+(``like``, ``instr``, ``replace``, ``trim``) cost O(n * m) inside a single
+instruction. Keeping every value small bounds that cost, so the timeout holds.
+"""
+MAX_LIKE_PATTERN_LENGTH = 50
+MAX_COLUMNS = 100
+MAX_RESULT_CHARS = 200_000
+"""Approximate size cap of the whole result; rows beyond it are cut (``truncated``)."""
 PROGRESS_HANDLER_STEPS = 1_000
 
 ALLOWED_FUNCTIONS: frozenset[str] = frozenset(
@@ -352,6 +361,13 @@ def validate(sql: str, schema: Schema) -> ValidatedQuery:
     if len(sql) > MAX_SQL_LENGTH:
         raise _reject(f"SQL longer than {MAX_SQL_LENGTH} characters.")
     try:
+        return _validate(sql, schema)
+    except RecursionError:
+        raise _reject("The query is too deeply nested.") from None
+
+
+def _validate(sql: str, schema: Schema) -> ValidatedQuery:
+    try:
         statements = [tree for tree in sqlglot.parse(sql, read="sqlite") if tree is not None]
     except SqlglotError:
         raise _reject("The SQL could not be parsed.") from None
@@ -433,6 +449,8 @@ def guarded_connection(path: Path, tables: frozenset[str]) -> Iterator[sqlite3.C
     with closing(database.connect_read_only(path)) as connection:
         connection.setlimit(sqlite3.SQLITE_LIMIT_ATTACHED, 0)
         connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_VALUE_LENGTH)
+        connection.setlimit(sqlite3.SQLITE_LIMIT_LIKE_PATTERN_LENGTH, MAX_LIKE_PATTERN_LENGTH)
+        connection.setlimit(sqlite3.SQLITE_LIMIT_COLUMN, MAX_COLUMNS)
         connection.setlimit(sqlite3.SQLITE_LIMIT_SQL_LENGTH, MAX_SQL_LENGTH * 4)
         connection.set_authorizer(_authorizer(tables))
         yield connection
@@ -479,20 +497,23 @@ def execute(
                 "authorizer", f"Blocked by the authorizer: {message}."
             ) from None
         if "too big" in message:
-            raise QueryRejectedError("limits", "A value exceeded the size limit.") from None
+            raise QueryRejectedError(
+                "limits", f"A value exceeded the size limit of {MAX_VALUE_LENGTH} bytes."
+            ) from None
+        if message.startswith("LIKE or GLOB pattern too complex"):
+            raise QueryRejectedError(
+                "limits", f"LIKE/GLOB patterns are limited to {MAX_LIKE_PATTERN_LENGTH} characters."
+            ) from None
+        if message.startswith("too many columns"):
+            raise QueryRejectedError(
+                "limits", f"Results are limited to {MAX_COLUMNS} columns."
+            ) from None
         if "readonly" in message or "query_only" in message:
             raise QueryRejectedError("read_only", "The database is read-only.") from None
         raise QueryFailedError(f"The query failed: {message}.") from None
     finally:
         connection.set_progress_handler(None, 0)
     return columns, fetched[: limits.max_rows], len(fetched) > limits.max_rows
-
-
-def _cell(value: database.CellValue | bytes) -> database.CellValue:
-    cell = database.to_cell(value)
-    if isinstance(cell, str) and len(cell) > MAX_CELL_CHARS:
-        return cell[:MAX_CELL_CHARS] + "...[truncated]"
-    return cell
 
 
 def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult:
@@ -516,14 +537,23 @@ def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult
     validated = validate(sql, schema)
     tables = frozenset(name.lower() for name in schema)
     with guarded_connection(path, tables) as connection:
-        columns, rows, truncated = execute(connection, validated.sql, limits)
+        columns, fetched, truncated = execute(connection, validated.sql, limits)
     masked = validated.masked_positions
+    rows: list[list[database.CellValue]] = []
+    size = 0
+    for raw in fetched:
+        row = [
+            database.MASK if index in masked else database.to_cell(value)
+            for index, value in enumerate(raw)
+        ]
+        size += sum(len(str(cell)) for cell in row)
+        if size > MAX_RESULT_CHARS:
+            truncated = True
+            break
+        rows.append(row)
     return QueryResult(
         columns=columns,
-        rows=[
-            [database.MASK if index in masked else _cell(value) for index, value in enumerate(row)]
-            for row in rows
-        ],
+        rows=rows,
         row_count=len(rows),
         truncated=truncated,
         masked_columns=[name for index, name in enumerate(columns) if index in masked],

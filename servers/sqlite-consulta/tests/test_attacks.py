@@ -129,6 +129,21 @@ ATTACKS: tuple[Attack, ...] = (
         "limits",
     ),
     Attack("huge_sql", "SELECT 1" + " " * 20_000, "ast"),
+    Attack(
+        "like_pattern_backtracking",
+        "WITH RECURSIVE p(q, n) AS (SELECT '%', 1 UNION ALL SELECT q || 'a_', n + 1 FROM p "
+        "WHERE n < 100) SELECT Name LIKE (SELECT max(q) FROM p) || 'b' AS x FROM Artist",
+        "limits",
+    ),
+    Attack(
+        "long_text_for_quadratic_functions",
+        "WITH RECURSIVE t(a, n) AS (SELECT 'a', 1 UNION ALL SELECT a || 'a', n + 1 FROM t "
+        "WHERE n < 40000) SELECT instr(max(a), 'b') AS x FROM t",
+        "limits",
+    ),
+    Attack("wide_result", "SELECT " + ", ".join(["1"] * 101), "limits"),
+    Attack("deep_nesting", "SELECT " + "(" * 1500 + "1" + ")" * 1500, "ast"),
+    Attack("long_expression_chain", "SELECT " + " + ".join(["1"] * 1200), "ast"),
     # Attempts to read masked columns through filters, joins, grouping, and ordering.
     Attack(
         "where_like", "SELECT FirstName FROM Customer WHERE Email LIKE 'ana%'", "ast", ("nulls",)

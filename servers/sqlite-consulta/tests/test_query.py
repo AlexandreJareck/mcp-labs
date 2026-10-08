@@ -4,7 +4,7 @@ import pytest
 from sqlglot import exp
 from sqlite_consulta.database import MASK
 from sqlite_consulta.query import (
-    MAX_CELL_CHARS,
+    MAX_RESULT_CHARS,
     MAX_SQL_LENGTH,
     UNTRUSTED_DATA_NOTICE,
     Limits,
@@ -126,15 +126,26 @@ def test_row_limit_truncates(db_path: Path) -> None:
     assert result["truncated"] is True
 
 
-def test_long_text_cells_are_cut(db_path: Path) -> None:
-    long_sql = (
+def test_values_above_the_size_limit_are_rejected(db_path: Path) -> None:
+    sql = (
         "WITH RECURSIVE r(s) AS (SELECT 'x' UNION ALL SELECT s || s FROM r "
         "WHERE length(s) < 4096) SELECT max(s) AS s FROM r"
     )
-    (cell,) = run_query(db_path, long_sql)["rows"][0]
-    assert isinstance(cell, str)
-    assert cell.endswith("...[truncated]")
-    assert len(cell) == MAX_CELL_CHARS + len("...[truncated]")
+    with pytest.raises(QueryRejectedError, match="size limit") as error:
+        run_query(db_path, sql)
+    assert error.value.layer == "limits"
+
+
+def test_whole_result_size_is_capped(db_path: Path) -> None:
+    sql = (
+        "WITH RECURSIVE r(s) AS (SELECT 'x' UNION ALL SELECT s || s FROM r "
+        "WHERE length(s) < 1024) SELECT max(r.s) AS s, a.ArtistId FROM r, Artist AS a, "
+        "Artist AS b, Artist AS c GROUP BY a.ArtistId, b.ArtistId, c.ArtistId"
+    )
+    result = run_query(db_path, sql, Limits(max_rows=1000))
+    assert result["truncated"] is True
+    assert 0 < result["row_count"] < 512
+    assert len(repr(result["rows"])) < MAX_RESULT_CHARS * 1.1
 
 
 def test_blob_cells_are_described(db_path: Path) -> None:

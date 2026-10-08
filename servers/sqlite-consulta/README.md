@@ -16,10 +16,10 @@ O SQL é escrito pelo cliente MCP (por exemplo, o Claude Code). O servidor forne
   1. **AST** (`sqlglot`): uma única consulta `SELECT` sobre tabelas conhecidas; escrita, DDL, `PRAGMA`, `ATTACH`, transações e funções fora da allowlist são rejeitadas, mesmo escondidas em CTE ou subconsulta. Colunas sensíveis não podem aparecer em `WHERE`, `JOIN`, `GROUP BY`, `HAVING`, `ORDER BY` nem `LIMIT`.
   2. **Somente leitura**: a mesma conexão `mode=ro` + `query_only`, sem bancos anexados.
   3. **Authorizer do SQLite**: nega tudo que não for leitura de tabela conhecida ou função permitida, e devolve `NULL` no lugar de colunas sensíveis.
-  4. **Limites**: 2 segundos por consulta, 200 linhas, 100.000 bytes por valor no SQLite e 2.000 caracteres por célula na resposta.
+  4. **Limites**: 2 segundos por consulta, 200 linhas, 100 colunas, 2.000 bytes por valor, padrões de `LIKE`/`GLOB` de até 50 caracteres, cerca de 200.000 caracteres na resposta inteira e SQL de até 5.000 caracteres. O limite por valor existe porque funções como `like` e `instr` podem custar muito dentro de uma única instrução do SQLite, onde o timeout não age.
   5. **Mascaramento**: toda coluna de saída que depende de uma coluna sensível (direto, por alias, expressão, subconsulta, CTE ou `UNION`) volta como `***`.
 - O SQL executado é o regenerado a partir da árvore validada, e volta no campo `executed_sql`. Por isso, os nomes das colunas de saída vêm em minúsculas.
-- A suíte de ataque em [`tests/test_attacks.py`](tests/test_attacks.py) tem 56 SQLs maliciosos (injeção, instruções empilhadas, escrita disfarçada, `ATTACH`, `PRAGMA`, funções perigosas, consultas caras e tentativas de ler colunas mascaradas). Para cada um, ela registra a camada que bloqueia e as camadas internas que ainda bloqueariam se as de fora falhassem, e testa as duas coisas.
+- A suíte de ataque em [`tests/test_attacks.py`](tests/test_attacks.py) tem 61 SQLs maliciosos (injeção, instruções empilhadas, escrita disfarçada, `ATTACH`, `PRAGMA`, funções perigosas, consultas caras e tentativas de ler colunas mascaradas). Para cada um, ela registra a camada que bloqueia e as camadas internas que ainda bloqueariam se as de fora falhassem, e testa as duas coisas.
 - Nenhuma tool recebe caminho de arquivo; o servidor só abre o arquivo fixo do Chinook e confere o SHA-256 dele ao iniciar. Se o arquivo for trocado com o servidor já rodando, a troca só é detectada no próximo início (risco aceito: exige acesso de escrita à pasta de dados local).
 
 ## Pré-requisitos
