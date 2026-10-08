@@ -24,7 +24,7 @@ As skills e os agents em `.claude/` são instruções para o modelo. O usuário 
 
 - O conteúdo é discutido no idioma de quem revisa, e o arquivo final segue o padrão de mercado.
 - Qualquer mudança de conteúdo depois da tradução exige uma nova rodada: alterar em pt-BR, aprovar e traduzir de novo.
-- A `translate-to-english` vive em outro repositório (`POCS/skills`) e precisa estar instalada no ambiente de quem faz a tradução.
+- A `translate-to-english` vive em outro repositório (`POCS/skill-labs`) e precisa estar instalada no ambiente de quem faz a tradução.
 
 ## Alternativas consideradas
 
