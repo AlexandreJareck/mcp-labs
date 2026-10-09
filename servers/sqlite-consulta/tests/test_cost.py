@@ -23,6 +23,14 @@ from sqlite_consulta.query import UNBOUNDED_COST, prepare_query, run_prepared
             90,
         ),
         ("SELECT count(*) FROM (SELECT DISTINCT Name FROM Artist) x, Artist y", 64, 80),
+        # Equality joins on a non-unique column match many rows (phase 3 review).
+        ("SELECT count(*) FROM Customer a JOIN Customer b ON b.Country = a.Country", 2, 6),
+        (
+            "SELECT count(*) FROM Artist a JOIN Artist b "
+            "ON b.ArtistId IN (SELECT c.ArtistId FROM Artist c)",
+            64,
+            75,
+        ),
         # Range searches on a key can walk the whole table (found in the phase 3 review).
         ("SELECT count(*) FROM Artist a JOIN Artist b ON b.ArtistId > a.ArtistId", 64, 70),
         ("SELECT count(*) FROM Artist a JOIN Artist b ON b.ArtistId BETWEEN 1 AND 99", 64, 70),
@@ -32,6 +40,19 @@ from sqlite_consulta.query import UNBOUNDED_COST, prepare_query, run_prepared
 def test_cost_estimate(db_path: Path, sql: str, low: int, high: int) -> None:
     cost = prepare_query(db_path, sql).estimated_cost
     assert low <= cost <= high
+
+
+def test_low_cardinality_join_is_expensive(db_path: Path, tmp_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE INDEX IFK_ArtistName ON Artist (Name)")
+        conn.executemany("INSERT INTO Artist (Name) VALUES (?)", [("same",)] * 200)
+        conn.commit()
+    sql = "SELECT count(*) FROM Artist a JOIN Artist b ON b.Name = a.Name"
+    # 208 rows, the largest group has 200: about 208 * 200 = 41,600.
+    assert prepare_query(db_path, sql).estimated_cost > 40_000
 
 
 def test_recursive_cte_is_always_expensive(db_path: Path) -> None:
