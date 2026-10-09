@@ -93,29 +93,30 @@ A suíte de ataque (`tests/test_attacks.py`) registra, para cada caso, a camada 
 | Variável | Padrão | Uso |
 |----------|--------|-----|
 | `SQLITE_CONSULTA_DATA_DIR` | `~/.cache/mcp-labs/sqlite-consulta/` | Diretório do banco (fase 1). |
-| `SQLITE_CONSULTA_TIMEOUT_MS` | `2000` | Timeout de execução; limitado a no máximo 10000. |
-| `SQLITE_CONSULTA_MAX_ROWS` | `200` | Máximo de linhas devolvidas; limitado a no máximo 1000. |
-| `SQLITE_CONSULTA_CONFIRM_COST` | a definir na fase 3 | Custo estimado acima do qual se pede confirmação. |
-| `SQLITE_CONSULTA_HTTP_TOKEN` | sem padrão | Token do transporte HTTP; obrigatório para iniciar em HTTP. |
+| `SQLITE_CONSULTA_TIMEOUT_MS` | `2000` | Timeout de execução; de 50 a 10000. |
+| `SQLITE_CONSULTA_MAX_ROWS` | `200` | Máximo de linhas devolvidas; de 1 a 1000. |
+| `SQLITE_CONSULTA_CONFIRM_COST` | `1000000` | Custo estimado (linhas examinadas) acima do qual se pede confirmação; de 1 a 10¹². |
+| `SQLITE_CONSULTA_HTTP_TOKEN` | sem padrão | Token do transporte HTTP (mínimo de 16 caracteres); obrigatório para iniciar em HTTP. |
 
 Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mensagem clara (nunca caem silenciosamente para um valor inseguro).
 
 ### Log de auditoria (fase 3)
 
-- Uma linha JSON por consulta, via `logging` para **stderr** (nunca stdout, ADR-0004): `timestamp`, `tool`, `sql_normalized`, `decision` (`allowed`/`rejected`/`confirmed`/`declined`), `reason`, `duration_ms`, `row_count`.
-- `sql_normalized`: SQL regenerado pelo `sqlglot` com **literais substituídos por `?`**, para não registrar valores digitados (que podem ser dados pessoais). Valores de resultado nunca são registrados.
+- Uma linha JSON por consulta, via `logging` para **stderr** (nunca stdout, ADR-0004): `timestamp`, `tool`, `sql_normalized`, `event`, `decision` (`allowed`/`rejected`/`confirmed`/`declined`/`failed`), `reason` (a camada que bloqueou ou um motivo fixo), `duration_ms`, `row_count` e `estimated_cost`. Um evento `confirmation_requested` registra cada pedido de confirmação. Com `configure_audit_logging`, as linhas saem como JSON puro, sem o prefixo do `logging`.
+- `sql_normalized`: SQL regenerado pelo `sqlglot` com **literais substituídos por `?`**, para não registrar valores digitados (que podem ser dados pessoais). Blobs hexadecimais, booleanos e identificadores entre aspas também viram `?` (o SQLite trata um nome desconhecido entre aspas duplas como texto). SQL que não pode ser analisado nunca é registrado (vira `<unparseable>`), e o texto é cortado em 2.000 caracteres. Valores de resultado nunca são registrados.
 
 ### Transporte HTTP (fase 3)
 
 - stdio continua sendo o padrão; HTTP só com `--transport http`, ligado a `127.0.0.1`.
 - Autenticação por bearer token via `TokenVerifier` do SDK (`MCPServer(token_verifier=..., auth=AuthSettings(...))`), com comparação em tempo constante (`hmac.compare_digest`). Sem `SQLITE_CONSULTA_HTTP_TOKEN` definido, o servidor não inicia em HTTP.
-- Proteção contra DNS rebinding (validação de `Host`/`Origin`) conforme as opções do SDK, a confirmar na fase 3.
+- Proteção contra DNS rebinding: o padrão do SDK para localhost aceita só `Host` `127.0.0.1:<porta>`/`localhost:<porta>`; qualquer outro recebe 421, mesmo com token válido. Detalhes da decisão no [ADR-0012](../adr/0012-transporte-http-local-com-bearer-token-estatico.md).
 
 ### Confirmação humana (fase 3)
 
 - Custo estimado por `EXPLAIN QUERY PLAN` (tabelas varridas por `SCAN` e suas contagens de linhas). Acima do limite, o servidor pede confirmação ao usuário por **elicitation**, o mecanismo oficial do MCP.
-- No SDK 2.x, `ctx.elicit` só funciona em conexões com protocolo até 2025-11-25; na versão 2026-07-28 o caminho é o fluxo de múltiplas idas e voltas (`InputRequiredResult`, com resolvers). A fase 3 confirma qual usar e o comportamento do Claude Code.
-- Cliente sem suporte a elicitation ou resposta `decline`/`cancel`: a consulta **não** é executada (falha segura). Se o recurso se mostrar inviável, a alternativa vira ADR.
+- No SDK 2.x, `ctx.elicit` só funciona em conexões com protocolo até 2025-11-25. Por isso a confirmação usa um **resolver** (`Resolve` + `Elicit`), que funciona nas duas versões do protocolo: o parâmetro de confirmação fica escondido do modelo, que não consegue preenchê-lo ([ADR-0013](../adr/0013-confirmacao-humana-por-elicitation-com-resolver.md)).
+- Custo estimado: `SCAN` de tabela custa sua contagem de linhas, laços aninhados multiplicam, busca por igualdade em índice custa 1 por linha externa, busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira, subconsulta correlacionada é multiplicada pelos laços externos e CTE recursiva é sempre cara. **Achado da revisão da fase 3:** contar toda busca por índice como 1 deixava `JOIN ... ON b.Id > a.Id` (12 milhões de linhas) passar sem confirmação, e uma CTE recursiva infinita saía como barata. No Chinook, consultas típicas ficam abaixo de 11 mil; `Track × Track` dá cerca de 12 milhões.
+- Cliente sem suporte a elicitation (verificado pela capacidade declarada pelo cliente), resposta `decline`/`cancel` ou `confirm=false`: a consulta **não** é executada (falha segura), e a decisão fica no log de auditoria.
 
 ### RAG (fase 4)
 
@@ -185,5 +186,7 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 - [0009](../adr/0009-fonte-do-banco-chinook.md) — fonte e verificação do Chinook
 - [0010](../adr/0010-remocao-do-harness-de-avaliacao-e-fine-tuning.md) — remoção do harness de avaliação e do fine-tuning do roadmap
 - [0011](../adr/0011-gitleaks-contra-vazamento-de-segredos.md) — gitleaks no pre-commit e no CI
+- [0012](../adr/0012-transporte-http-local-com-bearer-token-estatico.md) — transporte HTTP local com bearer token estático
+- [0013](../adr/0013-confirmacao-humana-por-elicitation-com-resolver.md) — confirmação humana por elicitation com resolver
 
 <!-- Este documento passa de duas páginas porque cobre as quatro fases e o modelo de ameaças completo, como exigido. -->

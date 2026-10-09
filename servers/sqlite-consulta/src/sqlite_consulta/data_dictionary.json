@@ -1,0 +1,124 @@
+{
+  "database": "Chinook: a fictional digital music store. Customers buy tracks; each purchase is an invoice with one line per track.",
+  "tables": {
+    "Artist": {
+      "description": "Music artists and bands.",
+      "columns": {
+        "ArtistId": "Primary key.",
+        "Name": "Artist or band name."
+      }
+    },
+    "Album": {
+      "description": "Albums released by an artist.",
+      "columns": {
+        "AlbumId": "Primary key.",
+        "Title": "Album title.",
+        "ArtistId": "The artist who released the album (Artist.ArtistId)."
+      }
+    },
+    "Track": {
+      "description": "Individual songs or video episodes for sale. The main product table.",
+      "columns": {
+        "TrackId": "Primary key.",
+        "Name": "Track title.",
+        "AlbumId": "Album the track belongs to (Album.AlbumId); null for singles.",
+        "MediaTypeId": "File format of the track (MediaType.MediaTypeId).",
+        "GenreId": "Musical genre (Genre.GenreId).",
+        "Composer": "Composers, as free text; often null.",
+        "Milliseconds": "Duration in milliseconds.",
+        "Bytes": "File size in bytes.",
+        "UnitPrice": "Price of the track in the store currency."
+      }
+    },
+    "Genre": {
+      "description": "Musical genres, such as Rock or Jazz.",
+      "columns": {
+        "GenreId": "Primary key.",
+        "Name": "Genre name."
+      }
+    },
+    "MediaType": {
+      "description": "File formats of tracks, such as MPEG audio file.",
+      "columns": {
+        "MediaTypeId": "Primary key.",
+        "Name": "Media type name."
+      }
+    },
+    "Playlist": {
+      "description": "Named playlists. The same track can be in many playlists.",
+      "columns": {
+        "PlaylistId": "Primary key.",
+        "Name": "Playlist name. Names are not unique."
+      }
+    },
+    "PlaylistTrack": {
+      "description": "Link table between Playlist and Track (many to many).",
+      "columns": {
+        "PlaylistId": "Playlist (Playlist.PlaylistId).",
+        "TrackId": "Track in the playlist (Track.TrackId)."
+      }
+    },
+    "Customer": {
+      "description": "People and companies that buy tracks. Contact columns are masked.",
+      "columns": {
+        "CustomerId": "Primary key.",
+        "FirstName": "Given name.",
+        "LastName": "Family name.",
+        "Company": "Company name; often null.",
+        "Address": "Street address. Sensitive: masked.",
+        "City": "City.",
+        "State": "State or province; often null.",
+        "Country": "Country name, such as USA or Brazil.",
+        "PostalCode": "Postal code. Sensitive: masked.",
+        "Phone": "Phone number. Sensitive: masked.",
+        "Fax": "Fax number. Sensitive: masked.",
+        "Email": "Email address. Sensitive: masked.",
+        "SupportRepId": "Sales support agent responsible for the customer (Employee.EmployeeId)."
+      }
+    },
+    "Employee": {
+      "description": "Store staff, with a reporting hierarchy. Personal columns are masked.",
+      "columns": {
+        "EmployeeId": "Primary key.",
+        "LastName": "Family name.",
+        "FirstName": "Given name.",
+        "Title": "Job title, such as Sales Support Agent.",
+        "ReportsTo": "Manager of the employee (Employee.EmployeeId); null for the top of the hierarchy.",
+        "BirthDate": "Date of birth. Sensitive: masked.",
+        "HireDate": "Date the employee was hired.",
+        "Address": "Street address. Sensitive: masked.",
+        "City": "City.",
+        "State": "State or province.",
+        "Country": "Country name.",
+        "PostalCode": "Postal code. Sensitive: masked.",
+        "Phone": "Phone number. Sensitive: masked.",
+        "Fax": "Fax number. Sensitive: masked.",
+        "Email": "Email address. Sensitive: masked."
+      }
+    },
+    "Invoice": {
+      "description": "A purchase made by a customer. Each invoice has one or more InvoiceLine rows.",
+      "columns": {
+        "InvoiceId": "Primary key.",
+        "CustomerId": "Customer who bought (Customer.CustomerId).",
+        "InvoiceDate": "Date and time of the purchase.",
+        "BillingAddress": "Billing street address. Sensitive: masked.",
+        "BillingCity": "Billing city.",
+        "BillingState": "Billing state or province; often null.",
+        "BillingCountry": "Billing country name.",
+        "BillingPostalCode": "Billing postal code. Sensitive: masked.",
+        "Total": "Invoice total, equal to the sum of UnitPrice * Quantity of its lines."
+      }
+    },
+    "InvoiceLine": {
+      "description": "One purchased track on an invoice.",
+      "columns": {
+        "InvoiceLineId": "Primary key.",
+        "InvoiceId": "Invoice the line belongs to (Invoice.InvoiceId).",
+        "TrackId": "Track that was bought (Track.TrackId).",
+        "UnitPrice": "Price of one unit when it was bought.",
+        "Quantity": "Number of units bought."
+      }
+    }
+  }
+}

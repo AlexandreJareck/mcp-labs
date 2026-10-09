@@ -4,7 +4,7 @@ Assistente de dados text-to-SQL seguro sobre o banco de exemplo Chinook (SQLite)
 
 O SQL é escrito pelo cliente MCP (por exemplo, o Claude Code). O servidor fornece contexto, valida e executa com segurança, e nunca chama um LLM. O desenho completo e o modelo de ameaças estão no [Design Doc 0001](../../docs/design/0001-sqlite-consulta.md).
 
-**Estado atual: fase 2.** Além de listar tabelas, descrever o schema e ver algumas linhas, o servidor executa SQL livre de leitura (`run_query`), protegido em camadas.
+**Estado atual: fase 3.** Além de listar tabelas, descrever o schema, ver algumas linhas e executar SQL livre de leitura (`run_query`, protegido em camadas), o servidor expõe o schema e o dicionário de dados como resources, registra cada consulta num log de auditoria, aceita limites por variável de ambiente, pede confirmação humana para consultas caras e pode rodar por HTTP local com token.
 
 ## Segurança
 
@@ -41,6 +41,12 @@ O comando baixa o `Chinook_Sqlite.sqlite` da release `v1.4.5` de [lerocha/chinoo
 | Variável de ambiente | Padrão | Uso |
 |----------------------|--------|-----|
 | `SQLITE_CONSULTA_DATA_DIR` | `~/.cache/mcp-labs/sqlite-consulta/` | Diretório onde o banco é gravado e lido. |
+| `SQLITE_CONSULTA_TIMEOUT_MS` | `2000` | Timeout de cada consulta, de 50 a 10000 ms. |
+| `SQLITE_CONSULTA_MAX_ROWS` | `200` | Máximo de linhas por consulta, de 1 a 1000. |
+| `SQLITE_CONSULTA_CONFIRM_COST` | `1000000` | Custo estimado (linhas examinadas) acima do qual o usuário precisa confirmar a consulta. |
+| `SQLITE_CONSULTA_HTTP_TOKEN` | sem padrão | Token do transporte HTTP, com no mínimo 16 caracteres. Obrigatório só em HTTP; nunca o versione nem o coloque em arquivo do repositório. |
+
+Valor inválido ou fora da faixa faz o servidor sair com código 1 e uma mensagem que cita o nome da variável (nunca o valor).
 
 ## Como rodar
 
@@ -51,6 +57,30 @@ uv run sqlite-consulta
 O servidor fala MCP por stdio: ele fica aguardando mensagens JSON-RPC no stdin. Para testá-lo de forma interativa, conecte-o a um cliente MCP (abaixo). Antes de iniciar, ele confere o SHA-256 do banco; se o arquivo não existir ou não bater, sai com código 1 e pede para rodar `download-db`.
 
 `uv run sqlite-consulta --help` mostra os subcomandos (`serve`, o padrão, e `download-db`).
+
+### Transporte HTTP
+
+O stdio é o padrão. Para HTTP, defina o token numa variável de ambiente da sua sessão (por exemplo, gerado com `python -c "import secrets; print(secrets.token_urlsafe(32))"`) e rode:
+
+```bash
+uv run sqlite-consulta serve --transport http --port 8123
+```
+
+O servidor escuta só em `127.0.0.1`, no caminho `/mcp`. Requisição sem token ou com token errado recebe 401; requisição com `Host` diferente de `127.0.0.1`/`localhost` recebe 421, mesmo com token (proteção contra DNS rebinding). Sem `SQLITE_CONSULTA_HTTP_TOKEN`, o servidor não inicia em HTTP. Decisão no [ADR-0012](../../docs/adr/0012-transporte-http-local-com-bearer-token-estatico.md).
+
+### Log de auditoria
+
+Cada chamada de `run_query` gera uma linha JSON no **stderr** (nunca no stdout, que é o canal do protocolo), com `timestamp`, `tool`, `sql_normalized`, `decision` (`allowed`, `rejected`, `confirmed`, `declined` ou `failed`), `reason`, `duration_ms`, `row_count` e `estimated_cost`. No SQL registrado, literais (texto, número, blob hexadecimal e booleano) e identificadores entre aspas viram `?`, porque podem conter dados pessoais (o SQLite lê um nome desconhecido entre aspas duplas como texto); SQL que não pode ser analisado não é registrado. Valores de resultado nunca são registrados. Exemplo:
+
+```json
+{"timestamp":"2026-10-09T23:45:45.919+00:00","event":"query","tool":"run_query","sql_normalized":"SELECT Name FROM Artist WHERE ArtistId = ?","decision":"allowed","reason":"","duration_ms":5.3,"row_count":1,"estimated_cost":2}
+```
+
+### Confirmação de consultas caras
+
+Antes de executar, `run_query` estima o custo pelo `EXPLAIN QUERY PLAN` do SQLite. Acima de `SQLITE_CONSULTA_CONFIRM_COST`, o servidor pede confirmação ao usuário por **elicitation** (o mecanismo oficial do MCP), com o custo estimado e os limites. A consulta só roda se o usuário aceitar. Recusa, cancelamento ou cliente sem suporte a elicitation fazem a consulta não rodar.
+
+A estimativa é aproximada: varredura completa custa o número de linhas da tabela, laços aninhados multiplicam, busca por igualdade em índice custa 1 por linha externa e busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira. CTE recursiva não tem tamanho conhecido e sempre pede confirmação. A estimativa decide quando perguntar; a proteção que sempre vale é o timeout e os limites de tamanho. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
 
 ## Tools
 
@@ -67,7 +97,10 @@ Funções permitidas em `run_query`: agregações (`count`, `sum`, `avg`, `min`,
 
 ## Resources
 
-Nenhum.
+| URI | Conteúdo |
+|-----|----------|
+| `sqlite-consulta://schema` | Schema em JSON: tabelas, colunas, tipos, chaves e quais colunas são sensíveis. |
+| `sqlite-consulta://dictionary` | Dicionário de dados em JSON: descrição de cada tabela e coluna (arquivo versionado `src/sqlite_consulta/data_dictionary.json`), contagem de linhas e sensibilidade. |
 
 ## Como conectar ao Claude
 
@@ -79,6 +112,14 @@ claude mcp list
 ```
 
 O `claude mcp list` deve mostrar `sqlite-consulta: ... - ✓ Connected`. Rode `download-db` antes; sem o banco, o servidor não inicia.
+
+Por HTTP, com o servidor rodando como acima e o token na variável `SQLITE_CONSULTA_HTTP_TOKEN` do seu terminal (em PowerShell, `$env:SQLITE_CONSULTA_HTTP_TOKEN`):
+
+```bash
+claude mcp add --transport http sqlite-consulta-http http://127.0.0.1:8123/mcp --header "Authorization: Bearer $SQLITE_CONSULTA_HTTP_TOKEN"
+```
+
+O Claude Code guarda o cabeçalho na sua configuração local (`~/.claude.json`), fora do repositório.
 
 ## Testes
 
