@@ -6,7 +6,7 @@ Cada servidor fica em `servers/<nome>/`.
 
 | Servidor | O que faz | Estado |
 |----------|-----------|--------|
-| [`sqlite-consulta`](servers/sqlite-consulta/README.md) | Assistente de dados text-to-SQL seguro sobre o banco Chinook (SQLite) | fase 2 do [Roadmap](#roadmap) |
+| [`sqlite-consulta`](servers/sqlite-consulta/README.md) | Assistente de dados text-to-SQL seguro sobre o banco Chinook (SQLite) | fase 3 do [Roadmap](#roadmap) |
 
 ## Pré-requisitos
 

@@ -19,9 +19,10 @@ exactly what was analyzed.
 """
 
 import json
+import re
 import sqlite3
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -124,10 +125,12 @@ class ValidatedQuery:
     Attributes:
         sql: SQL regenerated from the qualified AST; this is what runs.
         masked_positions: Output positions derived from sensitive columns.
+        table_aliases: Pairs of (alias, table), lowercase, for every table reference.
     """
 
     sql: str
     masked_positions: frozenset[int]
+    table_aliases: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -399,9 +402,19 @@ def _validate(sql: str, schema: Schema) -> ValidatedQuery:
         raise _reject("Unknown column or ambiguous reference.") from None
     tables = {name.lower(): name.lower() for name in schema}
     tainted = _analyze_query(qualified, _Env(tables=tables))
+    aliases = tuple(
+        sorted(
+            {
+                (node.alias_or_name.lower(), node.name.lower())
+                for node in qualified.find_all(exp.Table)
+                if node.name.lower() in tables
+            }
+        )
+    )
     return ValidatedQuery(
         sql=qualified.sql(dialect="sqlite"),
         masked_positions=frozenset(index for index, taint in enumerate(tainted) if taint),
+        table_aliases=aliases,
     )
 
 
@@ -457,6 +470,31 @@ def guarded_connection(path: Path, tables: frozenset[str]) -> Iterator[sqlite3.C
         yield connection
 
 
+def _translate_error(error: sqlite3.Error) -> QueryRejectedError | QueryFailedError:
+    message = str(error)
+    if message == "interrupted":
+        return QueryRejectedError("limits", "Query exceeded the time limit.")
+    if (
+        message.startswith("not authorized")
+        or message.endswith("is prohibited")
+        or message == "authorization denied"
+    ):
+        return QueryRejectedError("authorizer", f"Blocked by the authorizer: {message}.")
+    if "too big" in message:
+        return QueryRejectedError(
+            "limits", f"A value exceeded the size limit of {MAX_VALUE_LENGTH} bytes."
+        )
+    if message.startswith("LIKE or GLOB pattern too complex"):
+        return QueryRejectedError(
+            "limits", f"LIKE/GLOB patterns are limited to {MAX_LIKE_PATTERN_LENGTH} characters."
+        )
+    if message.startswith("too many columns"):
+        return QueryRejectedError("limits", f"Results are limited to {MAX_COLUMNS} columns.")
+    if "readonly" in message or "query_only" in message:
+        return QueryRejectedError("read_only", "The database is read-only.")
+    return QueryFailedError(f"The query failed: {message}.")
+
+
 def execute(
     connection: sqlite3.Connection, sql: str, limits: Limits
 ) -> tuple[list[str], list[tuple[database.CellValue | bytes, ...]], bool]:
@@ -486,57 +524,142 @@ def execute(
         columns = [str(description[0]) for description in cursor.description]
         fetched = cursor.fetchmany(limits.max_rows + 1)
     except sqlite3.Error as error:
-        message = str(error)
-        if message == "interrupted":
-            raise QueryRejectedError("limits", "Query exceeded the time limit.") from None
-        if (
-            message.startswith("not authorized")
-            or message.endswith("is prohibited")
-            or message == "authorization denied"
-        ):
-            raise QueryRejectedError(
-                "authorizer", f"Blocked by the authorizer: {message}."
-            ) from None
-        if "too big" in message:
-            raise QueryRejectedError(
-                "limits", f"A value exceeded the size limit of {MAX_VALUE_LENGTH} bytes."
-            ) from None
-        if message.startswith("LIKE or GLOB pattern too complex"):
-            raise QueryRejectedError(
-                "limits", f"LIKE/GLOB patterns are limited to {MAX_LIKE_PATTERN_LENGTH} characters."
-            ) from None
-        if message.startswith("too many columns"):
-            raise QueryRejectedError(
-                "limits", f"Results are limited to {MAX_COLUMNS} columns."
-            ) from None
-        if "readonly" in message or "query_only" in message:
-            raise QueryRejectedError("read_only", "The database is read-only.") from None
-        raise QueryFailedError(f"The query failed: {message}.") from None
+        raise _translate_error(error) from None
     finally:
         connection.set_progress_handler(None, 0)
     return columns, fetched[: limits.max_rows], len(fetched) > limits.max_rows
 
 
-def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult:
-    """Validate and run a query through every protection layer.
+def _plan_rows(connection: sqlite3.Connection, sql: str) -> list[tuple[int, int, str]]:
+    try:
+        cursor = connection.execute("EXPLAIN QUERY PLAN " + sql)
+        return [(int(row[0]), int(row[1]), str(row[3])) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        raise _translate_error(error) from None
+
+
+_SCAN = re.compile(r"SCAN (\S+)")
+_ROUTINE = re.compile(r"(?:CO-ROUTINE|MATERIALIZE) (\S+)")
+
+
+def estimate_cost(
+    connection: sqlite3.Connection, validated: ValidatedQuery, row_counts: Mapping[str, int]
+) -> int:
+    """Estimate how many rows a query will examine, from SQLite's query plan.
+
+    Full scans of a table cost its row count, and nested scans multiply. Index
+    searches count as one row per outer row. A correlated subquery runs once per
+    outer row, so its cost is multiplied by the outer loops. This is an
+    approximation used to decide when to ask for confirmation, not a guarantee:
+    the timeout and the size limits still apply to every query.
+
+    Args:
+        connection: A connection from `guarded_connection`.
+        validated: The validated query.
+        row_counts: Row count of each table, keyed by lowercase table name.
+
+    Returns:
+        The estimated number of rows examined.
+
+    Raises:
+        QueryRejectedError: If SQLite blocks the plan (for example, the authorizer).
+        QueryFailedError: If SQLite cannot plan the query.
+    """
+    aliases: dict[str, int] = {}
+    for alias, table in validated.table_aliases:
+        aliases[alias] = max(aliases.get(alias, 0), row_counts.get(table, 0))
+    children: dict[int, list[tuple[int, str]]] = {}
+    for node_id, parent_id, detail in _plan_rows(connection, validated.sql):
+        children.setdefault(parent_id, []).append((node_id, detail))
+
+    sizes: dict[str, int] = {}
+
+    def scan_size(detail: str) -> int:
+        match = _SCAN.match(detail)
+        if match is None:
+            return 1
+        name = match.group(1).strip('"').lower()
+        return aliases.get(name) or row_counts.get(name) or sizes.get(name, 1)
+
+    def loops(parent_id: int) -> int:
+        product = 1
+        for _, detail in children.get(parent_id, []):
+            product *= scan_size(detail)
+        return product
+
+    for rows in children.values():
+        for node_id, detail in rows:
+            routine = _ROUTINE.match(detail)
+            if routine is not None:
+                sizes[routine.group(1).strip('"').lower()] = loops(node_id)
+
+    def group_cost(parent_id: int, multiplier: int) -> int:
+        own = loops(parent_id)
+        total = own * multiplier
+        for node_id, detail in children.get(parent_id, []):
+            inner = multiplier * own if detail.startswith("CORRELATED") else multiplier
+            total += group_cost(node_id, inner)
+        return total
+
+    return group_cost(0, 1)
+
+
+@dataclass(frozen=True)
+class PreparedQuery:
+    """A validated query with its estimated cost.
+
+    Attributes:
+        validated: The query that passed the AST layer.
+        estimated_cost: Estimated number of rows examined (see `estimate_cost`).
+    """
+
+    validated: ValidatedQuery
+    estimated_cost: int
+
+
+def prepare_query(path: Path, sql: str) -> PreparedQuery:
+    """Validate a query and estimate its cost, without running it.
 
     Args:
         path: Path of the database file.
         sql: SQL sent by the client.
+
+    Returns:
+        The prepared query.
+
+    Raises:
+        QueryRejectedError: If any layer blocks the query.
+        QueryFailedError: If SQLite cannot plan an allowed query.
+    """
+    with closing(database.connect_read_only(path)) as connection:
+        schema = load_schema(connection)
+        row_counts = {t["name"].lower(): t["row_count"] for t in database.list_tables(connection)}
+    validated = validate(sql, schema)
+    tables = frozenset(name.lower() for name in schema)
+    with guarded_connection(path, tables) as connection:
+        cost = estimate_cost(connection, validated, row_counts)
+    return PreparedQuery(validated=validated, estimated_cost=cost)
+
+
+def run_prepared(path: Path, prepared: PreparedQuery, limits: Limits | None = None) -> QueryResult:
+    """Run a prepared query through the inner layers and mask the result.
+
+    Args:
+        path: Path of the database file.
+        prepared: A query from `prepare_query`.
         limits: Execution limits; defaults to `Limits()`.
 
     Returns:
         The rows, with sensitive output columns masked.
 
     Raises:
-        QueryRejectedError: If any layer blocks the query.
+        QueryRejectedError: If an inner layer blocks the query.
         QueryFailedError: If SQLite cannot run an allowed query.
     """
     limits = limits or Limits()
+    validated = prepared.validated
     with closing(database.connect_read_only(path)) as connection:
-        schema = load_schema(connection)
-    validated = validate(sql, schema)
-    tables = frozenset(name.lower() for name in schema)
+        tables = frozenset(t["name"].lower() for t in database.list_tables(connection))
     with guarded_connection(path, tables) as connection:
         columns, fetched, truncated = execute(connection, validated.sql, limits)
     masked = validated.masked_positions
@@ -561,3 +684,21 @@ def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult
         executed_sql=validated.sql,
         notice=UNTRUSTED_DATA_NOTICE,
     )
+
+
+def run_query(path: Path, sql: str, limits: Limits | None = None) -> QueryResult:
+    """Validate and run a query through every protection layer.
+
+    Args:
+        path: Path of the database file.
+        sql: SQL sent by the client.
+        limits: Execution limits; defaults to `Limits()`.
+
+    Returns:
+        The rows, with sensitive output columns masked.
+
+    Raises:
+        QueryRejectedError: If any layer blocks the query.
+        QueryFailedError: If SQLite cannot run an allowed query.
+    """
+    return run_prepared(path, prepare_query(path, sql), limits)
