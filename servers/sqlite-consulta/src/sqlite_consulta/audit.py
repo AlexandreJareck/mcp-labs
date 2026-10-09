@@ -28,11 +28,24 @@ UNPARSEABLE = "<unparseable>"
 MAX_LOGGED_SQL = 2_000
 
 
+def _mask_values(node: exp.Expr) -> exp.Expr:
+    # Literals of every kind become placeholders. Quoted identifiers are masked too:
+    # SQLite reads an unknown "double-quoted" name as a string literal.
+    if isinstance(node, exp.Literal | exp.HexString | exp.Boolean):
+        return exp.Placeholder()
+    if isinstance(node, exp.Identifier) and node.quoted:
+        return exp.Identifier(this="?", quoted=False)
+    return node
+
+
 def normalize_sql(sql: str) -> str:
     """Return the SQL with every literal replaced by a placeholder.
 
     Args:
         sql: SQL sent by the client.
+
+    Literals (strings, numbers, hex blobs, booleans) and quoted identifiers
+    become ``?``.
 
     Returns:
         The normalized SQL (truncated), or a marker when it cannot be parsed.
@@ -46,9 +59,7 @@ def normalize_sql(sql: str) -> str:
     for tree in trees:
         if tree is None:
             continue
-        normalized = tree.transform(
-            lambda node: exp.Placeholder() if isinstance(node, exp.Literal) else node
-        )
+        normalized = tree.transform(_mask_values)
         statements.append(normalized.sql(dialect="sqlite"))
     text = "; ".join(statements) or UNPARSEABLE
     return text if len(text) <= MAX_LOGGED_SQL else text[:MAX_LOGGED_SQL] + "..."

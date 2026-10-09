@@ -539,6 +539,9 @@ def _plan_rows(connection: sqlite3.Connection, sql: str) -> list[tuple[int, int,
 
 
 _SCAN = re.compile(r"SCAN (\S+)")
+_SEARCH = re.compile(r"SEARCH (\S+) .*\((?P<terms>[^()]*)\)$")
+UNBOUNDED_COST = 10**12 + 1
+"""Cost given to plans without a known size, such as recursive CTEs: always confirmed."""
 _ROUTINE = re.compile(r"(?:CO-ROUTINE|MATERIALIZE) (\S+)")
 
 
@@ -548,7 +551,9 @@ def estimate_cost(
     """Estimate how many rows a query will examine, from SQLite's query plan.
 
     Full scans of a table cost its row count, and nested scans multiply. Index
-    searches count as one row per outer row. A correlated subquery runs once per
+    searches by equality count as one row per outer row; range searches
+    (``>``, ``<``, ``BETWEEN``) count as the whole table. Recursive CTEs have no
+    known size and get `UNBOUNDED_COST`. A correlated subquery runs once per
     outer row, so its cost is multiplied by the outer loops. This is an
     approximation used to decide when to ask for confirmation, not a guarantee:
     the timeout and the size limits still apply to every query.
@@ -572,9 +577,17 @@ def estimate_cost(
     for node_id, parent_id, detail in _plan_rows(connection, validated.sql):
         children.setdefault(parent_id, []).append((node_id, detail))
 
+    if any(detail == "RECURSIVE STEP" for rows in children.values() for _, detail in rows):
+        return UNBOUNDED_COST
     sizes: dict[str, int] = {}
 
     def scan_size(detail: str) -> int:
+        search = _SEARCH.match(detail)
+        if search is not None:
+            if "<" not in search.group("terms") and ">" not in search.group("terms"):
+                return 1
+            name = search.group(1).strip('"').lower()
+            return aliases.get(name) or row_counts.get(name) or 1
         match = _SCAN.match(detail)
         if match is None:
             return 1

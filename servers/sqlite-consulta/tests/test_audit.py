@@ -31,6 +31,18 @@ def test_normalization_covers_literals_in_every_clause() -> None:
     assert "5" not in normalized
 
 
+@pytest.mark.parametrize(
+    ("sql", "secret"),
+    [
+        ("SELECT Name FROM Artist WHERE Payload = x'deadbeef'", "deadbeef"),
+        ('SELECT Name FROM Artist WHERE Name = "secret-name"', "secret-name"),
+        ("SELECT Name FROM Artist WHERE flag = true", "true"),
+    ],
+)
+def test_other_literal_forms_are_masked(sql: str, secret: str) -> None:
+    assert secret not in normalize_sql(sql).lower()
+
+
 def test_unparseable_sql_is_never_logged() -> None:
     assert normalize_sql("SELECT 'abc@example.com' FROM (") == UNPARSEABLE
 

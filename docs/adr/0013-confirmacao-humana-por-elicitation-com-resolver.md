@@ -15,7 +15,7 @@ A fase 3 exige confirmação humana antes de consultas caras, usando o mecanismo
 ## Decisão
 
 - A tool `run_query` declara um parâmetro resolvido (`Annotated[ElicitationResult[...], Resolve(...)]`), escondido do modelo: o modelo não consegue preencher a confirmação.
-- O resolver estima o custo da consulta pelo `EXPLAIN QUERY PLAN` do SQLite (linhas de tabelas varridas por `SCAN`, multiplicadas em laços aninhados e em subconsultas correlacionadas). Abaixo do limite (`SQLITE_CONSULTA_CONFIRM_COST`, padrão 1.000.000), não pergunta nada; acima, devolve `Elicit` com o custo estimado e os limites.
+- O resolver estima o custo da consulta pelo `EXPLAIN QUERY PLAN` do SQLite: `SCAN` de tabela e busca por faixa em índice (`>`, `<`, `BETWEEN`) custam a tabela inteira, busca por igualdade custa 1, laços aninhados e subconsultas correlacionadas multiplicam, e CTE recursiva (tamanho desconhecido) é sempre considerada cara. Abaixo do limite (`SQLITE_CONSULTA_CONFIRM_COST`, padrão 1.000.000), não pergunta nada; acima, devolve `Elicit` com o custo estimado e os limites.
 - **Falha fechada:** a consulta cara só roda com `accept` e `confirm=true`. Recusa, cancelamento, `confirm=false` ou cliente sem a capacidade de elicitation resultam em erro da tool, sem executar, e em uma linha de auditoria com a decisão.
 
 ## Consequências

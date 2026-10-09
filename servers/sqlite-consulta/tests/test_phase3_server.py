@@ -174,7 +174,10 @@ async def test_audit_line_for_allowed_query(
 async def test_limits_from_settings_apply(db_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.INFO, logger=AUDIT)
     settings = config.Settings(max_rows=3, timeout_ms=100)
-    async with Client(server.create_server(db_path, settings)) as client:
+    confirm = _callback("accept", True, [])
+    async with Client(
+        server.create_server(db_path, settings), elicitation_callback=confirm
+    ) as client:
         rows = await client.call_tool("run_query", {"sql": "SELECT Name FROM Artist"})
         slow = await client.call_tool(
             "run_query",
@@ -188,7 +191,8 @@ async def test_limits_from_settings_apply(db_path: Path, caplog: pytest.LogCaptu
     assert rows.structured_content["truncated"] is True
     assert slow.is_error
     assert "time limit" in str(slow.content)
-    assert [line["decision"] for line in _audit_lines(caplog)] == ["allowed", "rejected"]
+    decisions = [line.get("decision") for line in _audit_lines(caplog)]
+    assert decisions == ["allowed", None, "rejected"]  # None: confirmation_requested
     assert _audit_lines(caplog)[-1]["reason"] == "limits"
 
 

@@ -103,7 +103,7 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 ### Log de auditoria (fase 3)
 
 - Uma linha JSON por consulta, via `logging` para **stderr** (nunca stdout, ADR-0004): `timestamp`, `tool`, `sql_normalized`, `event`, `decision` (`allowed`/`rejected`/`confirmed`/`declined`/`failed`), `reason` (a camada que bloqueou ou um motivo fixo), `duration_ms`, `row_count` e `estimated_cost`. Um evento `confirmation_requested` registra cada pedido de confirmação. Com `configure_audit_logging`, as linhas saem como JSON puro, sem o prefixo do `logging`.
-- `sql_normalized`: SQL regenerado pelo `sqlglot` com **literais substituídos por `?`**, para não registrar valores digitados (que podem ser dados pessoais). SQL que não pode ser analisado nunca é registrado (vira `<unparseable>`), e o texto é cortado em 2.000 caracteres. Valores de resultado nunca são registrados.
+- `sql_normalized`: SQL regenerado pelo `sqlglot` com **literais substituídos por `?`**, para não registrar valores digitados (que podem ser dados pessoais). Blobs hexadecimais, booleanos e identificadores entre aspas também viram `?` (o SQLite trata um nome desconhecido entre aspas duplas como texto). SQL que não pode ser analisado nunca é registrado (vira `<unparseable>`), e o texto é cortado em 2.000 caracteres. Valores de resultado nunca são registrados.
 
 ### Transporte HTTP (fase 3)
 
@@ -115,7 +115,7 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 
 - Custo estimado por `EXPLAIN QUERY PLAN` (tabelas varridas por `SCAN` e suas contagens de linhas). Acima do limite, o servidor pede confirmação ao usuário por **elicitation**, o mecanismo oficial do MCP.
 - No SDK 2.x, `ctx.elicit` só funciona em conexões com protocolo até 2025-11-25. Por isso a confirmação usa um **resolver** (`Resolve` + `Elicit`), que funciona nas duas versões do protocolo: o parâmetro de confirmação fica escondido do modelo, que não consegue preenchê-lo ([ADR-0013](../adr/0013-confirmacao-humana-por-elicitation-com-resolver.md)).
-- Custo estimado: `SCAN` de tabela custa sua contagem de linhas, laços aninhados multiplicam, busca por índice custa 1 por linha externa e subconsulta correlacionada é multiplicada pelos laços externos. No Chinook, consultas típicas ficam abaixo de 11 mil; `Track × Track` dá cerca de 12 milhões.
+- Custo estimado: `SCAN` de tabela custa sua contagem de linhas, laços aninhados multiplicam, busca por igualdade em índice custa 1 por linha externa, busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira, subconsulta correlacionada é multiplicada pelos laços externos e CTE recursiva é sempre cara. **Achado da revisão da fase 3:** contar toda busca por índice como 1 deixava `JOIN ... ON b.Id > a.Id` (12 milhões de linhas) passar sem confirmação, e uma CTE recursiva infinita saía como barata. No Chinook, consultas típicas ficam abaixo de 11 mil; `Track × Track` dá cerca de 12 milhões.
 - Cliente sem suporte a elicitation (verificado pela capacidade declarada pelo cliente), resposta `decline`/`cancel` ou `confirm=false`: a consulta **não** é executada (falha segura), e a decisão fica no log de auditoria.
 
 ### RAG (fase 4)

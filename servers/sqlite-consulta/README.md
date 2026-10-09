@@ -70,7 +70,7 @@ O servidor escuta só em `127.0.0.1`, no caminho `/mcp`. Requisição sem token 
 
 ### Log de auditoria
 
-Cada chamada de `run_query` gera uma linha JSON no **stderr** (nunca no stdout, que é o canal do protocolo), com `timestamp`, `tool`, `sql_normalized`, `decision` (`allowed`, `rejected`, `confirmed`, `declined` ou `failed`), `reason`, `duration_ms`, `row_count` e `estimated_cost`. No SQL registrado, todo literal vira `?`, porque literais podem conter dados pessoais; SQL que não pode ser analisado não é registrado. Valores de resultado nunca são registrados. Exemplo:
+Cada chamada de `run_query` gera uma linha JSON no **stderr** (nunca no stdout, que é o canal do protocolo), com `timestamp`, `tool`, `sql_normalized`, `decision` (`allowed`, `rejected`, `confirmed`, `declined` ou `failed`), `reason`, `duration_ms`, `row_count` e `estimated_cost`. No SQL registrado, literais (texto, número, blob hexadecimal e booleano) e identificadores entre aspas viram `?`, porque podem conter dados pessoais (o SQLite lê um nome desconhecido entre aspas duplas como texto); SQL que não pode ser analisado não é registrado. Valores de resultado nunca são registrados. Exemplo:
 
 ```json
 {"timestamp":"2026-10-09T23:45:45.919+00:00","event":"query","tool":"run_query","sql_normalized":"SELECT Name FROM Artist WHERE ArtistId = ?","decision":"allowed","reason":"","duration_ms":5.3,"row_count":1,"estimated_cost":2}
@@ -78,7 +78,9 @@ Cada chamada de `run_query` gera uma linha JSON no **stderr** (nunca no stdout, 
 
 ### Confirmação de consultas caras
 
-Antes de executar, `run_query` estima o custo pelo `EXPLAIN QUERY PLAN` do SQLite. Acima de `SQLITE_CONSULTA_CONFIRM_COST`, o servidor pede confirmação ao usuário por **elicitation** (o mecanismo oficial do MCP), com o custo estimado e os limites. A consulta só roda se o usuário aceitar. Recusa, cancelamento ou cliente sem suporte a elicitation fazem a consulta não rodar. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
+Antes de executar, `run_query` estima o custo pelo `EXPLAIN QUERY PLAN` do SQLite. Acima de `SQLITE_CONSULTA_CONFIRM_COST`, o servidor pede confirmação ao usuário por **elicitation** (o mecanismo oficial do MCP), com o custo estimado e os limites. A consulta só roda se o usuário aceitar. Recusa, cancelamento ou cliente sem suporte a elicitation fazem a consulta não rodar.
+
+A estimativa é aproximada: varredura completa custa o número de linhas da tabela, laços aninhados multiplicam, busca por igualdade em índice custa 1 por linha externa e busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira. CTE recursiva não tem tamanho conhecido e sempre pede confirmação. A estimativa decide quando perguntar; a proteção que sempre vale é o timeout e os limites de tamanho. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
 
 ## Tools
 
