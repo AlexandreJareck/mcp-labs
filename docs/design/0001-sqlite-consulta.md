@@ -159,6 +159,7 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 
 - **Nomes de colunas em minúsculas** no resultado de `run_query`, porque o SQL executado é o regenerado pelo `sqlglot`. Aceito: o SQLite não diferencia maiúsculas em nomes.
 - **Mascaramento conservador:** em `UNION`, se um lado da coluna é sensível, a coluna inteira é mascarada; em CTE recursiva, a sensibilidade se propaga por todas as iterações.
+- **Estimativa de custo é heurística:** em quatro rodadas, a revisão da fase 3 achou seis formas de consulta cara estimada como barata (busca por faixa, CTE recursiva, FK de baixa cardinalidade, `IN (subconsulta)`, prefixo de índice único composto, CTE materializada e `OR` entre índices); todas foram corrigidas e têm teste. Outras formas podem existir: a confirmação reduz o risco, e o timeout e os limites de tamanho são a garantia que sempre vale.
 - **Mascaramento por linhagem incompleto** em SQL incomum: mitigado pela rejeição de colunas sensíveis em filtros, pela suíte de ataque e por falha segura (consulta que o analisador não consegue qualificar é rejeitada).
 - **Diferenças entre o dialeto do `sqlglot` e o SQLite real:** a autorização final é do SQLite (authorizer), não do parser.
 - **Elicitation sem suporte no cliente:** a consulta cara é recusada; a experiência piora, mas a segurança não.

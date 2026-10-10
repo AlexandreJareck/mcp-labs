@@ -75,6 +75,21 @@ def test_search_on_materialized_cte_is_not_cheap(db_path: Path) -> None:
     assert prepare_query(db_path, sql).estimated_cost >= 64 * 8
 
 
+def test_or_of_indexed_equalities_multiplies(db_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE TABLE T (Id INTEGER PRIMARY KEY, G INTEGER, M INTEGER)")
+        conn.execute("CREATE INDEX T_G ON T (G)")
+        conn.execute("CREATE INDEX T_M ON T (M)")
+        conn.executemany("INSERT INTO T (G, M) VALUES (?, ?)", [(i % 2, i % 3) for i in range(300)])
+        conn.commit()
+    sql = "SELECT count(*) FROM T a JOIN T b ON b.G = a.G OR b.M = a.M"
+    # Real result: 300 * (150 + 100 - 50) = 60,000 rows.
+    assert prepare_query(db_path, sql).estimated_cost >= 60_000
+
+
 def test_recursive_cte_is_always_expensive(db_path: Path) -> None:
     sql = "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT count(*) FROM r"
     assert prepare_query(db_path, sql).estimated_cost == UNBOUNDED_COST

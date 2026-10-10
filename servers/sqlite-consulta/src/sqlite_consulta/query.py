@@ -684,10 +684,21 @@ def estimate_cost(
         name = match.group(1).strip('"').lower()
         return aliases.get(name) or row_counts.get(name) or sizes.get(name) or unknown_size()
 
+    def or_branches(node_id: int) -> int:
+        # MULTI-INDEX OR runs one lookup per branch for each outer row: sum the branches.
+        total = 0
+        for branch_id, _ in children.get(node_id, []):
+            for _, detail in children.get(branch_id, []):
+                total += scan_size(detail)
+        return max(total, 1)
+
     def loops(parent_id: int) -> int:
         product = 1
-        for _, detail in children.get(parent_id, []):
-            product *= scan_size(detail)
+        for node_id, detail in children.get(parent_id, []):
+            if detail == "MULTI-INDEX OR":
+                product *= or_branches(node_id)
+            else:
+                product *= scan_size(detail)
         return product
 
     for rows in children.values():
@@ -700,6 +711,8 @@ def estimate_cost(
         own = loops(parent_id)
         total = own * multiplier
         for node_id, detail in children.get(parent_id, []):
+            if detail == "MULTI-INDEX OR":
+                continue  # already counted in `loops`
             inner = multiplier * own if detail.startswith("CORRELATED") else multiplier
             total += group_cost(node_id, inner)
         return total
