@@ -82,6 +82,8 @@ Antes de executar, `run_query` estima o custo pelo `EXPLAIN QUERY PLAN` do SQLit
 
 A estimativa é aproximada: varredura completa custa o número de linhas da tabela, laços aninhados multiplicam, busca por igualdade custa 1 em chave única e, em coluna não única, o tamanho do maior grupo de valores iguais; busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira; e uma lista `IN (subconsulta)` custa o tamanho da tabela que a alimenta. CTE recursiva não tem tamanho conhecido e sempre pede confirmação. A estimativa decide quando perguntar; a proteção que sempre vale é o timeout e os limites de tamanho. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
 
+Comportamento observado no Claude Code 2.1.84 (Windows): no `claude` do terminal, o pedido aparece e, ao aceitar, a consulta roda; no app desktop, o pedido não é mostrado e a consulta cara é recusada (falha segura).
+
 ## Tools
 
 Todas são somente leitura (`read_only_hint`) e devolvem saída estruturada.
