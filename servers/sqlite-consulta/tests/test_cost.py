@@ -55,6 +55,26 @@ def test_low_cardinality_join_is_expensive(db_path: Path, tmp_path: Path) -> Non
     assert prepare_query(db_path, sql).estimated_cost > 40_000
 
 
+def test_prefix_of_composite_unique_index_is_not_unique(db_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE TABLE Link (A INTEGER, B INTEGER, PRIMARY KEY (A, B))")
+        conn.executemany("INSERT INTO Link VALUES (?, ?)", [(1, i) for i in range(100)])
+        conn.commit()
+    sql = "SELECT count(*) FROM Link x JOIN Link y ON y.A = x.A"
+    assert prepare_query(db_path, sql).estimated_cost >= 100 * 100
+
+
+def test_search_on_materialized_cte_is_not_cheap(db_path: Path) -> None:
+    sql = (
+        "WITH g AS MATERIALIZED (SELECT a.Name AS k FROM Artist a, Artist b) "
+        "SELECT count(*) FROM g x JOIN g y ON y.k = x.k"
+    )
+    assert prepare_query(db_path, sql).estimated_cost >= 64 * 8
+
+
 def test_recursive_cte_is_always_expensive(db_path: Path) -> None:
     sql = "WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r) SELECT count(*) FROM r"
     assert prepare_query(db_path, sql).estimated_cost == UNBOUNDED_COST

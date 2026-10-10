@@ -550,14 +550,15 @@ UNBOUNDED_COST = 10**12 + 1
 _ROUTINE = re.compile(r"(?:CO-ROUTINE|MATERIALIZE) (\S+)")
 
 
-type Fanout = Callable[[str, str | None, str], int]
-"""Rows matched per equality lookup: (table, index or None, column) -> rows."""
+type Fanout = Callable[[str, str | None, str, int], int]
+"""Rows per equality lookup: (table, index or None, first column, equality terms) -> rows."""
 
 
 def equality_fanout(connection: sqlite3.Connection, schema: Schema) -> Fanout:
     """Build a function that estimates rows per equality lookup on an index.
 
-    A unique index (or the primary key) matches one row. Otherwise the estimate
+    A unique index matches one row only when the equality terms cover all of
+    its columns; a lookup by a prefix of a composite unique index does not. Otherwise the estimate
     is the size of the largest group of equal values in the column (the worst
     key), which catches joins on low-cardinality or skewed foreign keys.
 
@@ -572,10 +573,10 @@ def equality_fanout(connection: sqlite3.Connection, schema: Schema) -> Fanout:
     columns = {
         name.lower(): {column.lower(): column for column in cols} for name, cols in schema.items()
     }
-    cache: dict[tuple[str, str | None, str], int] = {}
+    cache: dict[tuple[str, str | None, str, int], int] = {}
 
-    def fanout(table: str, index: str | None, column: str) -> int:
-        key = (table.lower(), index, column.lower())
+    def fanout(table: str, index: str | None, column: str, terms: int) -> int:
+        key = (table.lower(), index, column.lower(), terms)
         if key in cache:
             return cache[key]
         real_table = tables.get(key[0])
@@ -586,6 +587,11 @@ def equality_fanout(connection: sqlite3.Connection, schema: Schema) -> Fanout:
         unique = index is not None and connection.execute(
             'SELECT "unique" FROM pragma_index_list(?) WHERE name = ?', (real_table, index)
         ).fetchone() == (1,)
+        if unique:
+            (width,) = connection.execute(
+                "SELECT count(*) FROM pragma_index_info(?)", (index,)
+            ).fetchone()
+            unique = terms >= int(width)
         if unique:
             cache[key] = 1
             return 1
@@ -647,6 +653,11 @@ def estimate_cost(
         return UNBOUNDED_COST
     sizes: dict[str, int] = {}
 
+    def unknown_size() -> int:
+        # A CTE or subquery read through an alias: no statistics, so assume it is as
+        # large as the largest known source. Never 1.
+        return max([*sizes.values(), *row_counts.values(), 1])
+
     def scan_size(detail: str) -> int:
         in_operator = _IN_OPERATOR.match(detail)
         if in_operator is not None:
@@ -659,14 +670,19 @@ def estimate_cost(
                 return aliases.get(name) or row_counts.get(name) or 1
             if search.group("pk") or fanout is None:
                 return 1
+            table = alias_tables.get(name)
+            if table is None:
+                return unknown_size()
             first = _FIRST_COLUMN.search(terms)
-            table = alias_tables.get(name, name)
-            return fanout(table, search.group("index"), first.group(1)) if first else 1
+            if first is None:
+                return aliases.get(name) or 1
+            count = len(_FIRST_COLUMN.findall(terms))
+            return fanout(table, search.group("index"), first.group(1), count)
         match = _SCAN.match(detail)
-        if match is None:
+        if match is None or detail.startswith("SCAN CONSTANT ROW"):
             return 1
         name = match.group(1).strip('"').lower()
-        return aliases.get(name) or row_counts.get(name) or sizes.get(name, 1)
+        return aliases.get(name) or row_counts.get(name) or sizes.get(name) or unknown_size()
 
     def loops(parent_id: int) -> int:
         product = 1
