@@ -4,7 +4,7 @@ Assistente de dados text-to-SQL seguro sobre o banco de exemplo Chinook (SQLite)
 
 O SQL é escrito pelo cliente MCP (por exemplo, o Claude Code). O servidor fornece contexto, valida e executa com segurança, e nunca chama um LLM. O desenho completo e o modelo de ameaças estão no [Design Doc 0001](../../docs/design/0001-sqlite-consulta.md).
 
-**Estado atual: fase 3.** Além de listar tabelas, descrever o schema, ver algumas linhas e executar SQL livre de leitura (`run_query`, protegido em camadas), o servidor expõe o schema e o dicionário de dados como resources, registra cada consulta num log de auditoria, aceita limites por variável de ambiente, pede confirmação humana para consultas caras e pode rodar por HTTP local com token.
+**Estado atual: fase 4.** Além de listar tabelas, descrever o schema, ver algumas linhas e executar SQL livre de leitura (`run_query`, protegido em camadas), o servidor expõe o schema e o dicionário de dados como resources, registra cada consulta num log de auditoria, aceita limites por variável de ambiente, pede confirmação humana para consultas caras, pode rodar por HTTP local com token e busca contexto para uma pergunta (`search_context`) com RAG local.
 
 ## Segurança
 
@@ -47,6 +47,16 @@ O comando baixa o `Chinook_Sqlite.sqlite` da release `v1.4.5` de [lerocha/chinoo
 | `SQLITE_CONSULTA_HTTP_TOKEN` | sem padrão | Token do transporte HTTP, com no mínimo 16 caracteres. Obrigatório só em HTTP; nunca o versione nem o coloque em arquivo do repositório. |
 
 Valor inválido ou fora da faixa faz o servidor sair com código 1 e uma mensagem que cita o nome da variável (nunca o valor).
+
+## Como obter o modelo de embeddings
+
+A tool `search_context` usa um modelo multilíngue local (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, cerca de 250 MB, licença Apache-2.0), baixado uma vez do Hugging Face, sem conta nem token:
+
+```bash
+uv run sqlite-consulta download-model
+```
+
+O modelo fica em `models/` dentro de `SQLITE_CONSULTA_DATA_DIR`. O servidor nunca baixa o modelo sozinho: sem ele, `search_context` responde pedindo para rodar `download-model`, e as outras tools continuam funcionando. Decisão no [ADR-0014](../../docs/adr/0014-modelo-multilingue-e-busca-hibrida-com-rrf.md).
 
 ## Como rodar
 
@@ -93,9 +103,16 @@ Todas são somente leitura (`read_only_hint`) e devolvem saída estruturada.
 | `list_tables` | nenhum | Tabelas do banco com a contagem de linhas. |
 | `describe_table` | `table` | Colunas (tipo, `NOT NULL`, chave primária, se é sensível) e chaves estrangeiras. |
 | `sample_rows` | `table` | Até 5 linhas, com as colunas sensíveis mascaradas; `row_count` e `truncated` indicam quantas vieram e se a tabela tem mais. |
+| `search_context` | `question`, `k` (1 a 10, padrão 5) | Devolve os trechos mais relevantes para uma pergunta, em português ou inglês: tabelas do dicionário de dados (descrição e colunas) e perguntas de exemplo com o SQL correspondente. Cada trecho traz `score` e as posições na busca lexical (`lexical_rank`) e vetorial (`vector_rank`). Use antes de escrever o SQL. |
 | `run_query` | `sql` | Executa um `SELECT` (dialeto SQLite) e devolve `columns`, `rows`, `row_count`, `truncated`, `masked_columns`, `executed_sql` e o aviso de dados não confiáveis. Consulta bloqueada vira erro da tool com a camada que bloqueou, por exemplo `Query rejected (ast): ...`. |
 
 Funções permitidas em `run_query`: agregações (`count`, `sum`, `avg`, `min`, `max`, `total`, `group_concat`), texto (`lower`, `upper`, `length`, `substr`, `trim`, `replace`, `instr`, `like`, `glob`), números (`abs`, `round`), nulos (`coalesce`, `ifnull`, `nullif`, `iif`), datas (`date`, `time`, `datetime`, `julianday`, `strftime`, `unixepoch`), `typeof` e as funções de janela (`row_number`, `rank`, `lag`, `lead` etc.). A lista completa está em `ALLOWED_FUNCTIONS`, em `src/sqlite_consulta/query.py`.
+
+### Como funciona a busca de contexto
+
+- Fontes versionadas, dentro do pacote: `data_dictionary.json` (um trecho por tabela) e `examples.json` (21 perguntas em português com o SQL, todas validadas pelas camadas de proteção e testadas contra o Chinook).
+- Busca **lexical** com BM25 (sem acentos, com nomes em camelCase separados, como `InvoiceLine` em `invoice line`) e busca **vetorial** com os embeddings do modelo local, combinadas por *Reciprocal Rank Fusion*.
+- O índice é montado em memória no primeiro uso (cerca de 2 s com o modelo em cache); nada derivado é versionado.
 
 ## Resources
 
@@ -131,4 +148,4 @@ Os testes usam um banco pequeno criado no próprio teste e não dependem do down
 uv run pytest servers/sqlite-consulta --cov=sqlite_consulta --cov-report=term-missing
 ```
 
-O CI exige cobertura mínima de 80% para este servidor.
+O CI exige cobertura mínima de 80% para este servidor. Os testes de relevância de `search_context` (`tests/test_rag_relevance.py`) usam o modelo real: localmente, são pulados se o modelo não foi baixado; no CI, o modelo é baixado (e guardado em cache) e `SQLITE_CONSULTA_REQUIRE_MODEL=1` faz a falta do modelo falhar em vez de pular.

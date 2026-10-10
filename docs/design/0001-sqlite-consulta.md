@@ -120,9 +120,10 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 
 ### RAG (fase 4)
 
-- Fontes versionadas: `data_dictionary.yaml` (tabelas e colunas) e `examples.yaml` (perguntas com SQL), dentro do pacote do servidor.
+- Fontes versionadas: `data_dictionary.json` (tabelas e colunas, criado na fase 3 para o resource) e `examples.json` (21 perguntas em português com SQL), dentro do pacote do servidor. JSON em vez de YAML para não acrescentar dependência.
 - Chunking: um trecho por tabela (descrição + colunas) e um por exemplo (pergunta + SQL).
-- Embeddings locais com `fastembed` (ADR-0008); busca lexical BM25 local; combinação por Reciprocal Rank Fusion.
+- Embeddings locais com `fastembed` e o modelo multilíngue `paraphrase-multilingual-MiniLM-L12-v2` (ADR-0008, [ADR-0014](../adr/0014-modelo-multilingue-e-busca-hibrida-com-rrf.md)); busca lexical BM25 própria; combinação por Reciprocal Rank Fusion (`k = 60`).
+- Tool `search_context(question, k)`, somente leitura; o modelo só é baixado pelo comando `download-model`, e o servidor o abre com `local_files_only`.
 - O índice é recriado a partir dos arquivos versionados (não é versionado). O modelo é baixado uma vez de fonte pública e fica em cache local; no CI, o cache do modelo é reaproveitado entre execuções.
 
 ## Modelo de ameaças
@@ -189,5 +190,6 @@ Valores inválidos ou fora da faixa fazem o servidor falhar ao iniciar, com mens
 - [0011](../adr/0011-gitleaks-contra-vazamento-de-segredos.md) — gitleaks no pre-commit e no CI
 - [0012](../adr/0012-transporte-http-local-com-bearer-token-estatico.md) — transporte HTTP local com bearer token estático
 - [0013](../adr/0013-confirmacao-humana-por-elicitation-com-resolver.md) — confirmação humana por elicitation com resolver
+- [0014](../adr/0014-modelo-multilingue-e-busca-hibrida-com-rrf.md) — modelo de embeddings multilíngue e busca híbrida com RRF
 
 <!-- Este documento passa de duas páginas porque cobre as quatro fases e o modelo de ameaças completo, como exigido. -->

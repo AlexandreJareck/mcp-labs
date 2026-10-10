@@ -8,7 +8,7 @@ from mcp.server import MCPServer
 from sqlite_consulta import chinook, server
 from sqlite_consulta.database import MASK
 
-TOOL_NAMES = {"list_tables", "describe_table", "sample_rows", "run_query"}
+TOOL_NAMES = {"list_tables", "describe_table", "sample_rows", "run_query", "search_context"}
 
 
 @pytest.fixture

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "tracks-per-genre",
+    "question": "Quantas faixas existem de cada gênero musical?",
+    "sql": "SELECT g.Name AS genre, count(*) AS tracks FROM Track t JOIN Genre g ON g.GenreId = t.GenreId GROUP BY g.Name ORDER BY tracks DESC"
+  },
+  {
+    "id": "revenue-per-country",
+    "question": "Qual o faturamento total de cada país?",
+    "sql": "SELECT BillingCountry AS country, round(sum(Total), 2) AS revenue FROM Invoice GROUP BY BillingCountry ORDER BY revenue DESC"
+  },
+  {
+    "id": "top-customers",
+    "question": "Quais clientes gastaram mais dinheiro na loja?",
+    "sql": "SELECT c.FirstName, c.LastName, c.Country, round(sum(i.Total), 2) AS spent FROM Customer c JOIN Invoice i ON i.CustomerId = c.CustomerId GROUP BY c.CustomerId ORDER BY spent DESC LIMIT 10"
+  },
+  {
+    "id": "best-selling-tracks",
+    "question": "Quais são as músicas mais vendidas?",
+    "sql": "SELECT t.Name, sum(il.Quantity) AS units FROM InvoiceLine il JOIN Track t ON t.TrackId = il.TrackId GROUP BY t.TrackId ORDER BY units DESC LIMIT 10"
+  },
+  {
+    "id": "best-selling-artists",
+    "question": "Quais artistas geraram mais receita?",
+    "sql": "SELECT ar.Name AS artist, round(sum(il.UnitPrice * il.Quantity), 2) AS revenue FROM InvoiceLine il JOIN Track t ON t.TrackId = il.TrackId JOIN Album al ON al.AlbumId = t.AlbumId JOIN Artist ar ON ar.ArtistId = al.ArtistId GROUP BY ar.ArtistId ORDER BY revenue DESC LIMIT 10"
+  },
+  {
+    "id": "albums-per-artist",
+    "question": "Quantos álbuns cada artista lançou?",
+    "sql": "SELECT ar.Name AS artist, count(*) AS albums FROM Album al JOIN Artist ar ON ar.ArtistId = al.ArtistId GROUP BY ar.ArtistId ORDER BY albums DESC"
+  },
+  {
+    "id": "longest-tracks",
+    "question": "Quais são as músicas mais longas, em minutos?",
+    "sql": "SELECT Name, round(Milliseconds / 60000.0, 1) AS minutes FROM Track ORDER BY Milliseconds DESC LIMIT 10"
+  },
+  {
+    "id": "monthly-sales",
+    "question": "Como foram as vendas mês a mês?",
+    "sql": "SELECT strftime('%Y-%m', InvoiceDate) AS month, round(sum(Total), 2) AS revenue FROM Invoice GROUP BY month ORDER BY month"
+  },
+  {
+    "id": "sales-per-year",
+    "question": "Qual foi o faturamento de cada ano?",
+    "sql": "SELECT strftime('%Y', InvoiceDate) AS year, round(sum(Total), 2) AS revenue FROM Invoice GROUP BY year ORDER BY year"
+  },
+  {
+    "id": "employee-hierarchy",
+    "question": "Quem é o chefe de cada funcionário?",
+    "sql": "SELECT e.FirstName || ' ' || e.LastName AS employee, e.Title, m.FirstName || ' ' || m.LastName AS manager FROM Employee e LEFT JOIN Employee m ON m.EmployeeId = e.ReportsTo"
+  },
+  {
+    "id": "customers-per-rep",
+    "question": "Quantos clientes cada vendedor atende?",
+    "sql": "SELECT e.FirstName || ' ' || e.LastName AS sales_rep, count(c.CustomerId) AS customers FROM Employee e JOIN Customer c ON c.SupportRepId = e.EmployeeId GROUP BY e.EmployeeId ORDER BY customers DESC"
+  },
+  {
+    "id": "sales-per-rep",
+    "question": "Quanto cada vendedor vendeu?",
+    "sql": "SELECT e.FirstName || ' ' || e.LastName AS sales_rep, round(sum(i.Total), 2) AS revenue FROM Employee e JOIN Customer c ON c.SupportRepId = e.EmployeeId JOIN Invoice i ON i.CustomerId = c.CustomerId GROUP BY e.EmployeeId ORDER BY revenue DESC"
+  },
+  {
+    "id": "customers-per-country",
+    "question": "Quantos clientes há em cada país?",
+    "sql": "SELECT Country, count(*) AS customers FROM Customer GROUP BY Country ORDER BY customers DESC"
+  },
+  {
+    "id": "tracks-per-playlist",
+    "question": "Quantas músicas tem cada playlist?",
+    "sql": "SELECT p.Name AS playlist, count(pt.TrackId) AS tracks FROM Playlist p LEFT JOIN PlaylistTrack pt ON pt.PlaylistId = p.PlaylistId GROUP BY p.PlaylistId ORDER BY tracks DESC"
+  },
+  {
+    "id": "tracks-per-media-type",
+    "question": "Quantas faixas existem por formato de arquivo?",
+    "sql": "SELECT m.Name AS media_type, count(*) AS tracks FROM Track t JOIN MediaType m ON m.MediaTypeId = t.MediaTypeId GROUP BY m.Name ORDER BY tracks DESC"
+  },
+  {
+    "id": "average-track-price-per-genre",
+    "question": "Qual o preço médio das músicas de cada gênero?",
+    "sql": "SELECT g.Name AS genre, round(avg(t.UnitPrice), 2) AS average_price FROM Track t JOIN Genre g ON g.GenreId = t.GenreId GROUP BY g.Name ORDER BY average_price DESC"
+  },
+  {
+    "id": "unsold-tracks",
+    "question": "Quais músicas nunca foram vendidas?",
+    "sql": "SELECT t.Name FROM Track t WHERE t.TrackId NOT IN (SELECT TrackId FROM InvoiceLine) LIMIT 50"
+  },
+  {
+    "id": "tracks-of-artist",
+    "question": "Quais músicas são de um artista específico, como AC/DC?",
+    "sql": "SELECT t.Name AS track, al.Title AS album FROM Track t JOIN Album al ON al.AlbumId = t.AlbumId JOIN Artist ar ON ar.ArtistId = al.ArtistId WHERE ar.Name = 'AC/DC'"
+  },
+  {
+    "id": "average-invoice",
+    "question": "Qual o valor médio de uma compra?",
+    "sql": "SELECT round(avg(Total), 2) AS average_invoice, count(*) AS invoices FROM Invoice"
+  },
+  {
+    "id": "genre-sales-per-country",
+    "question": "Qual o gênero musical mais vendido em cada país?",
+    "sql": "WITH sales AS (SELECT i.BillingCountry AS country, g.Name AS genre, sum(il.Quantity) AS units FROM InvoiceLine il JOIN Invoice i ON i.InvoiceId = il.InvoiceId JOIN Track t ON t.TrackId = il.TrackId JOIN Genre g ON g.GenreId = t.GenreId GROUP BY country, genre), ranked AS (SELECT country, genre, units, rank() OVER (PARTITION BY country ORDER BY units DESC) AS position FROM sales) SELECT country, genre, units FROM ranked WHERE position = 1 ORDER BY country"
+  },
+  {
+    "id": "customer-contact-masked",
+    "question": "Qual o e-mail ou telefone dos clientes?",
+    "sql": "SELECT FirstName, LastName, Email, Phone FROM Customer LIMIT 10"
+  }
+]

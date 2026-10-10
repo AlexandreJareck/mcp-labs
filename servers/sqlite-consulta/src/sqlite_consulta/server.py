@@ -26,7 +26,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import AnyHttpUrl, BaseModel, Field
 
-from sqlite_consulta import audit, chinook, config, database, dictionary, query
+from sqlite_consulta import audit, chinook, config, database, dictionary, query, rag
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,22 @@ SqlText = Annotated[
         description="A single SQLite SELECT statement over the tables from list_tables.",
     ),
 ]
+
+
+Question = Annotated[
+    str,
+    Field(min_length=1, max_length=500, description="The user's question, in any language."),
+]
+ResultCount = Annotated[
+    int, Field(ge=1, le=rag.MAX_RESULTS, description="How many passages to return.")
+]
+
+
+class ContextResult(TypedDict):
+    """Passages relevant to a question."""
+
+    question: str
+    passages: list[rag.Passage]
 
 
 class TableList(TypedDict):
@@ -123,6 +139,7 @@ def create_server(
     settings: config.Settings | None = None,
     *,
     http_auth: HttpAuth | None = None,
+    context_index: rag.LazyContextIndex | None = None,
 ) -> MCPServer:
     """Build the MCP server over an already verified database file.
 
@@ -133,11 +150,13 @@ def create_server(
         database_path: Path of the database file.
         settings: Limits and the confirmation threshold; defaults to the safe defaults.
         http_auth: Token protection, only for the HTTP transport.
+        context_index: Index for `search_context`; defaults to the local model.
 
     Returns:
         The configured server.
     """
     settings = settings or config.Settings()
+    index = context_index or rag.LazyContextIndex()
     mcp = _http_server(http_auth) if http_auth else MCPServer("sqlite-consulta")
 
     @contextmanager
@@ -196,6 +215,21 @@ def create_server(
                 return database.sample_rows(conn, table)
             except database.UnknownTableError:
                 raise ToolError("Unknown table. Call list_tables to see the valid names.") from None
+
+    @mcp.tool(title="Search schema context", annotations=READ_ONLY)
+    async def search_context(question: Question, k: ResultCount = 5) -> ContextResult:
+        """Find the tables and example queries most relevant to a question.
+
+        Call this before writing SQL: it returns data dictionary entries (tables
+        with their columns) and similar example questions with their SQL, ranked
+        by a hybrid lexical and semantic search. Works with Portuguese or English.
+        """
+        try:
+            built = await asyncio.to_thread(index.get)
+        except rag.ModelNotAvailableError as error:
+            raise ToolError(str(error)) from None
+        passages = await asyncio.to_thread(built.search, question, k)
+        return ContextResult(question=question, passages=passages)
 
     async def confirm_expensive(
         sql: str, ctx: Context
@@ -300,6 +334,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     serve.add_argument("--port", type=int, default=DEFAULT_HTTP_PORT, help="HTTP port.")
     subcommands.add_parser("download-db", help="Download and verify the Chinook database.")
+    subcommands.add_parser(
+        "download-model", help="Download the embedding model used by search_context."
+    )
     return parser.parse_args(argv)
 
 
@@ -318,6 +355,9 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.command == "download-db":
             chinook.download_database(path)
+            return
+        if args.command == "download-model":
+            rag.download_model()
             return
         settings = config.load_settings()
         http_auth = None

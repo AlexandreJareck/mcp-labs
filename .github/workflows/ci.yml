@@ -20,8 +20,17 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
+      # Embedding model for search_context (ADR-0014): public Hugging Face download,
+      # cached between runs; the relevance tests must not be skipped in CI.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/mcp-labs/sqlite-consulta/models
+          key: embedding-model-paraphrase-multilingual-MiniLM-L12-v2
+      - run: uv run sqlite-consulta download-model
       # ADR-0002: 80% per server. With a second server, measure each package separately.
       - run: uv run pytest --cov=sqlite_consulta --cov-report=term-missing --cov-fail-under=80
+        env:
+          SQLITE_CONSULTA_REQUIRE_MODEL: "1"
   secrets:
     runs-on: ubuntu-latest
     env:

@@ -5,6 +5,7 @@ description = "Secure text-to-SQL data assistant over the Chinook sample databas
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastembed>=0.9.0",
     "mcp",
     "sqlglot>=30.21.0",
 ]
