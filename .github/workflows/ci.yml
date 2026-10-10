@@ -25,7 +25,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: ~/.cache/mcp-labs/sqlite-consulta/models
-          key: embedding-model-paraphrase-multilingual-MiniLM-L12-v2
+          key: embedding-model-paraphrase-multilingual-MiniLM-L12-v2-${{ hashFiles('uv.lock') }}
       - run: uv run sqlite-consulta download-model
       # ADR-0002: 80% per server. With a second server, measure each package separately.
       - run: uv run pytest --cov=sqlite_consulta --cov-report=term-missing --cov-fail-under=80

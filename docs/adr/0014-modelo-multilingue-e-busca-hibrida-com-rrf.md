@@ -23,7 +23,7 @@ O ADR-0008 escolheu o `fastembed` e deixou para a fase 4 a escolha do modelo: o 
 
 - Perguntas em português encontram tabelas descritas em inglês; nas perguntas de teste, o trecho esperado fica entre os três primeiros.
 - O primeiro uso exige rede e cerca de 250 MB; o CI guarda o modelo em cache entre execuções.
-- O modelo não tem hash fixado como o banco (ADR-0009): a integridade depende do Hugging Face e da revisão `main` do repositório. Aceito para um modelo público, de uso local e sem acesso a dados.
+- O modelo não tem hash fixado como o banco (ADR-0009): a integridade depende do Hugging Face e da revisão `main` do repositório. Aceito para um modelo público, de uso local e sem acesso a dados. Uma mudança no repositório de origem pode alterar o ranking e quebrar os testes de relevância sem mudança no código; o cache do CI é invalidado junto com o `uv.lock`.
 
 ## Alternativas consideradas
 

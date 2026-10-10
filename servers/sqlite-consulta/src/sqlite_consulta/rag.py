@@ -151,6 +151,7 @@ class FastEmbedder:
         except Exception as error:  # fastembed raises several types when files are missing
             if allow_download:
                 raise
+            logger.warning("Could not load the embedding model: %s", error)
             raise ModelNotAvailableError(
                 "Embedding model not found. Run 'uv run sqlite-consulta download-model' first."
             ) from error

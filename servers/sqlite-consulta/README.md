@@ -112,7 +112,7 @@ Funções permitidas em `run_query`: agregações (`count`, `sum`, `avg`, `min`,
 
 - Fontes versionadas, dentro do pacote: `data_dictionary.json` (um trecho por tabela) e `examples.json` (21 perguntas em português com o SQL, todas validadas pelas camadas de proteção e testadas contra o Chinook).
 - Busca **lexical** com BM25 (sem acentos, com nomes em camelCase separados, como `InvoiceLine` em `invoice line`) e busca **vetorial** com os embeddings do modelo local, combinadas por *Reciprocal Rank Fusion*.
-- O índice é montado em memória no primeiro uso (cerca de 2 s com o modelo em cache); nada derivado é versionado.
+- O índice é montado em memória no primeiro uso (o tempo depende da máquina, pois carrega o modelo); nada derivado é versionado.
 
 ## Resources
 
