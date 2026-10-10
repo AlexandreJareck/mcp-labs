@@ -539,20 +539,88 @@ def _plan_rows(connection: sqlite3.Connection, sql: str) -> list[tuple[int, int,
 
 
 _SCAN = re.compile(r"SCAN (\S+)")
-_SEARCH = re.compile(r"SEARCH (\S+) .*\((?P<terms>[^()]*)\)$")
+_SEARCH = re.compile(
+    r"SEARCH (?P<alias>\S+) USING (?:(?P<pk>INTEGER PRIMARY KEY)|(?:AUTOMATIC )?(?:COVERING )?"
+    r"INDEX ?(?P<index>\S+)?) ?\((?P<terms>[^()]*)\)$"
+)
+_IN_OPERATOR = re.compile(r".*ON TABLE (\S+) FOR IN-OPERATOR")
+_FIRST_COLUMN = re.compile(r"(\w+)\s*=")
 UNBOUNDED_COST = 10**12 + 1
 """Cost given to plans without a known size, such as recursive CTEs: always confirmed."""
 _ROUTINE = re.compile(r"(?:CO-ROUTINE|MATERIALIZE) (\S+)")
 
 
+type Fanout = Callable[[str, str | None, str, int], int]
+"""Rows per equality lookup: (table, index or None, first column, equality terms) -> rows."""
+
+
+def equality_fanout(connection: sqlite3.Connection, schema: Schema) -> Fanout:
+    """Build a function that estimates rows per equality lookup on an index.
+
+    A unique index matches one row only when the equality terms cover all of
+    its columns; a lookup by a prefix of a composite unique index does not. Otherwise the estimate
+    is the size of the largest group of equal values in the column (the worst
+    key), which catches joins on low-cardinality or skewed foreign keys.
+
+    Args:
+        connection: A plain read-only connection (not the guarded one).
+        schema: Tables and columns, used to validate names taken from the plan.
+
+    Returns:
+        The estimating function, with results cached.
+    """
+    tables = {name.lower(): name for name in schema}
+    columns = {
+        name.lower(): {column.lower(): column for column in cols} for name, cols in schema.items()
+    }
+    cache: dict[tuple[str, str | None, str, int], int] = {}
+
+    def fanout(table: str, index: str | None, column: str, terms: int) -> int:
+        key = (table.lower(), index, column.lower(), terms)
+        if key in cache:
+            return cache[key]
+        real_table = tables.get(key[0])
+        real_column = columns.get(key[0], {}).get(key[2])
+        if real_table is None or real_column is None:
+            cache[key] = 1
+            return 1
+        unique = index is not None and connection.execute(
+            'SELECT "unique" FROM pragma_index_list(?) WHERE name = ?', (real_table, index)
+        ).fetchone() == (1,)
+        if unique:
+            (width,) = connection.execute(
+                "SELECT count(*) FROM pragma_index_info(?)", (index,)
+            ).fetchone()
+            unique = terms >= int(width)
+        if unique:
+            cache[key] = 1
+            return 1
+        quoted_table = '"' + real_table.replace('"', '""') + '"'
+        quoted_column = '"' + real_column.replace('"', '""') + '"'
+        # Names come from the schema and are quoted, never from the client.
+        (largest,) = connection.execute(
+            f"SELECT max(n) FROM (SELECT count(*) AS n FROM {quoted_table} "  # noqa: S608
+            f"GROUP BY {quoted_column})"
+        ).fetchone()
+        cache[key] = max(1, int(largest or 1))
+        return cache[key]
+
+    return fanout
+
+
 def estimate_cost(
-    connection: sqlite3.Connection, validated: ValidatedQuery, row_counts: Mapping[str, int]
+    connection: sqlite3.Connection,
+    validated: ValidatedQuery,
+    row_counts: Mapping[str, int],
+    fanout: Fanout | None = None,
 ) -> int:
     """Estimate how many rows a query will examine, from SQLite's query plan.
 
     Full scans of a table cost its row count, and nested scans multiply. Index
-    searches by equality count as one row per outer row; range searches
-    (``>``, ``<``, ``BETWEEN``) count as the whole table. Recursive CTEs have no
+    searches by equality count as the rows per key (see `equality_fanout`;
+    one row when no fanout function is given); range searches (``>``, ``<``,
+    ``BETWEEN``) count as the whole table; an ``IN`` list counts as the size of
+    the table that feeds it. Recursive CTEs have no
     known size and get `UNBOUNDED_COST`. A correlated subquery runs once per
     outer row, so its cost is multiplied by the outer loops. This is an
     approximation used to decide when to ask for confirmation, not a guarantee:
@@ -562,6 +630,7 @@ def estimate_cost(
         connection: A connection from `guarded_connection`.
         validated: The validated query.
         row_counts: Row count of each table, keyed by lowercase table name.
+        fanout: Rows per equality lookup; see `equality_fanout`.
 
     Returns:
         The estimated number of rows examined.
@@ -571,7 +640,10 @@ def estimate_cost(
         QueryFailedError: If SQLite cannot plan the query.
     """
     aliases: dict[str, int] = {}
+    alias_tables: dict[str, str] = {}
     for alias, table in validated.table_aliases:
+        if row_counts.get(table, 0) >= aliases.get(alias, 0):
+            alias_tables[alias] = table
         aliases[alias] = max(aliases.get(alias, 0), row_counts.get(table, 0))
     children: dict[int, list[tuple[int, str]]] = {}
     for node_id, parent_id, detail in _plan_rows(connection, validated.sql):
@@ -581,23 +653,52 @@ def estimate_cost(
         return UNBOUNDED_COST
     sizes: dict[str, int] = {}
 
+    def unknown_size() -> int:
+        # A CTE or subquery read through an alias: no statistics, so assume it is as
+        # large as the largest known source. Never 1.
+        return max([*sizes.values(), *row_counts.values(), 1])
+
     def scan_size(detail: str) -> int:
+        in_operator = _IN_OPERATOR.match(detail)
+        if in_operator is not None:
+            return row_counts.get(in_operator.group(1).strip('"').lower(), 1) or 1
         search = _SEARCH.match(detail)
         if search is not None:
-            if "<" not in search.group("terms") and ">" not in search.group("terms"):
+            name = search.group("alias").strip('"').lower()
+            terms = search.group("terms")
+            if "<" in terms or ">" in terms:
+                return aliases.get(name) or row_counts.get(name) or 1
+            if search.group("pk") or fanout is None:
                 return 1
-            name = search.group(1).strip('"').lower()
-            return aliases.get(name) or row_counts.get(name) or 1
+            table = alias_tables.get(name)
+            if table is None:
+                return unknown_size()
+            first = _FIRST_COLUMN.search(terms)
+            if first is None:
+                return aliases.get(name) or 1
+            count = len(_FIRST_COLUMN.findall(terms))
+            return fanout(table, search.group("index"), first.group(1), count)
         match = _SCAN.match(detail)
-        if match is None:
+        if match is None or detail.startswith("SCAN CONSTANT ROW"):
             return 1
         name = match.group(1).strip('"').lower()
-        return aliases.get(name) or row_counts.get(name) or sizes.get(name, 1)
+        return aliases.get(name) or row_counts.get(name) or sizes.get(name) or unknown_size()
+
+    def or_branches(node_id: int) -> int:
+        # MULTI-INDEX OR runs one lookup per branch for each outer row: sum the branches.
+        total = 0
+        for branch_id, _ in children.get(node_id, []):
+            for _, detail in children.get(branch_id, []):
+                total += scan_size(detail)
+        return max(total, 1)
 
     def loops(parent_id: int) -> int:
         product = 1
-        for _, detail in children.get(parent_id, []):
-            product *= scan_size(detail)
+        for node_id, detail in children.get(parent_id, []):
+            if detail == "MULTI-INDEX OR":
+                product *= or_branches(node_id)
+            else:
+                product *= scan_size(detail)
         return product
 
     for rows in children.values():
@@ -610,6 +711,8 @@ def estimate_cost(
         own = loops(parent_id)
         total = own * multiplier
         for node_id, detail in children.get(parent_id, []):
+            if detail == "MULTI-INDEX OR":
+                continue  # already counted in `loops`
             inner = multiplier * own if detail.startswith("CORRELATED") else multiplier
             total += group_cost(node_id, inner)
         return total
@@ -649,8 +752,11 @@ def prepare_query(path: Path, sql: str) -> PreparedQuery:
         row_counts = {t["name"].lower(): t["row_count"] for t in database.list_tables(connection)}
     validated = validate(sql, schema)
     tables = frozenset(name.lower() for name in schema)
-    with guarded_connection(path, tables) as connection:
-        cost = estimate_cost(connection, validated, row_counts)
+    with (
+        closing(database.connect_read_only(path)) as plain,
+        guarded_connection(path, tables) as connection,
+    ):
+        cost = estimate_cost(connection, validated, row_counts, equality_fanout(plain, schema))
     return PreparedQuery(validated=validated, estimated_cost=cost)
 
 

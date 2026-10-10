@@ -80,7 +80,9 @@ Cada chamada de `run_query` gera uma linha JSON no **stderr** (nunca no stdout, 
 
 Antes de executar, `run_query` estima o custo pelo `EXPLAIN QUERY PLAN` do SQLite. Acima de `SQLITE_CONSULTA_CONFIRM_COST`, o servidor pede confirmação ao usuário por **elicitation** (o mecanismo oficial do MCP), com o custo estimado e os limites. A consulta só roda se o usuário aceitar. Recusa, cancelamento ou cliente sem suporte a elicitation fazem a consulta não rodar.
 
-A estimativa é aproximada: varredura completa custa o número de linhas da tabela, laços aninhados multiplicam, busca por igualdade em índice custa 1 por linha externa e busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira. CTE recursiva não tem tamanho conhecido e sempre pede confirmação. A estimativa decide quando perguntar; a proteção que sempre vale é o timeout e os limites de tamanho. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
+A estimativa é aproximada: varredura completa custa o número de linhas da tabela, laços aninhados multiplicam, busca por igualdade custa 1 em chave única e, em coluna não única, o tamanho do maior grupo de valores iguais; busca por faixa (`>`, `<`, `BETWEEN`) custa a tabela inteira; e uma lista `IN (subconsulta)` custa o tamanho da tabela que a alimenta. CTE recursiva não tem tamanho conhecido e sempre pede confirmação. A estimativa decide quando perguntar; a proteção que sempre vale é o timeout e os limites de tamanho. Decisão no [ADR-0013](../../docs/adr/0013-confirmacao-humana-por-elicitation-com-resolver.md).
+
+Comportamento observado no Claude Code 2.1.84 (Windows): no `claude` do terminal, o pedido aparece e, ao aceitar, a consulta roda; no app desktop, o pedido não é mostrado e a consulta cara é recusada (falha segura).
 
 ## Tools
 

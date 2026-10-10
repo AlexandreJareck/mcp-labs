@@ -23,6 +23,14 @@ from sqlite_consulta.query import UNBOUNDED_COST, prepare_query, run_prepared
             90,
         ),
         ("SELECT count(*) FROM (SELECT DISTINCT Name FROM Artist) x, Artist y", 64, 80),
+        # Equality joins on a non-unique column match many rows (phase 3 review).
+        ("SELECT count(*) FROM Customer a JOIN Customer b ON b.Country = a.Country", 2, 6),
+        (
+            "SELECT count(*) FROM Artist a JOIN Artist b "
+            "ON b.ArtistId IN (SELECT c.ArtistId FROM Artist c)",
+            64,
+            75,
+        ),
         # Range searches on a key can walk the whole table (found in the phase 3 review).
         ("SELECT count(*) FROM Artist a JOIN Artist b ON b.ArtistId > a.ArtistId", 64, 70),
         ("SELECT count(*) FROM Artist a JOIN Artist b ON b.ArtistId BETWEEN 1 AND 99", 64, 70),
@@ -32,6 +40,54 @@ from sqlite_consulta.query import UNBOUNDED_COST, prepare_query, run_prepared
 def test_cost_estimate(db_path: Path, sql: str, low: int, high: int) -> None:
     cost = prepare_query(db_path, sql).estimated_cost
     assert low <= cost <= high
+
+
+def test_low_cardinality_join_is_expensive(db_path: Path, tmp_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE INDEX IFK_ArtistName ON Artist (Name)")
+        conn.executemany("INSERT INTO Artist (Name) VALUES (?)", [("same",)] * 200)
+        conn.commit()
+    sql = "SELECT count(*) FROM Artist a JOIN Artist b ON b.Name = a.Name"
+    # 208 rows, the largest group has 200: about 208 * 200 = 41,600.
+    assert prepare_query(db_path, sql).estimated_cost > 40_000
+
+
+def test_prefix_of_composite_unique_index_is_not_unique(db_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE TABLE Link (A INTEGER, B INTEGER, PRIMARY KEY (A, B))")
+        conn.executemany("INSERT INTO Link VALUES (?, ?)", [(1, i) for i in range(100)])
+        conn.commit()
+    sql = "SELECT count(*) FROM Link x JOIN Link y ON y.A = x.A"
+    assert prepare_query(db_path, sql).estimated_cost >= 100 * 100
+
+
+def test_search_on_materialized_cte_is_not_cheap(db_path: Path) -> None:
+    sql = (
+        "WITH g AS MATERIALIZED (SELECT a.Name AS k FROM Artist a, Artist b) "
+        "SELECT count(*) FROM g x JOIN g y ON y.k = x.k"
+    )
+    assert prepare_query(db_path, sql).estimated_cost >= 64 * 8
+
+
+def test_or_of_indexed_equalities_multiplies(db_path: Path) -> None:
+    import sqlite3
+    from contextlib import closing
+
+    with closing(sqlite3.connect(db_path)) as conn:
+        conn.execute("CREATE TABLE T (Id INTEGER PRIMARY KEY, G INTEGER, M INTEGER)")
+        conn.execute("CREATE INDEX T_G ON T (G)")
+        conn.execute("CREATE INDEX T_M ON T (M)")
+        conn.executemany("INSERT INTO T (G, M) VALUES (?, ?)", [(i % 2, i % 3) for i in range(300)])
+        conn.commit()
+    sql = "SELECT count(*) FROM T a JOIN T b ON b.G = a.G OR b.M = a.M"
+    # Real result: 300 * (150 + 100 - 50) = 60,000 rows.
+    assert prepare_query(db_path, sql).estimated_cost >= 60_000
 
 
 def test_recursive_cte_is_always_expensive(db_path: Path) -> None:
